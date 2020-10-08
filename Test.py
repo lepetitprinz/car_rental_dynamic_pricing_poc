@@ -3,6 +3,6 @@ from Preprocessing import Preprocessing
 
 prep = Preprocessing()
 
-df = prep.load_data(path='jeju.xls', format='excel')
+df = prep.load_data(path='test.csv', format='csv')
 
 print("")
