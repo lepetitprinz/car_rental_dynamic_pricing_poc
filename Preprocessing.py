@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 # plt.style.use('fivethirtyeight')
+from scipy.interpolate import interp1d
 
 class Preprocessing(object):
 
@@ -39,7 +40,7 @@ class Preprocessing(object):
 
     @staticmethod
     def date_to_idx(df: pd.DataFrame, feature: str):
-        df = df.reset_index(feature)
+        df = df.set_index(feature)
         return df
 
     def count_discount_changes(self, df: pd.DataFrame, feature: str):
@@ -75,21 +76,22 @@ class Preprocessing(object):
                 xlabelsize=8, ylabelsize=8)
 
     @staticmethod
-    def draw_line_plot(df: pd.DataFrame, x: str, y: str):
-        plt.clf()
+    def draw_line_plot(df: pd.DataFrame, x: str, y: str, interval: int, title: str):
+        # plt.clf()
         ax = df.plot.line(x=x, y=y,
                           figsize=(15, 5),
-                          linewidth=0.3)
+                          linewidth=0.8)
         ax.set_xticks([])
         ax.set_xticks([], minor=True)
-        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=interval))
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y%m'))
         plt.gcf().autofmt_xdate()
+        plt.title(title)
         plt.show()
 
-    def draw_plot_by_resample(self, df: pd.DataFrame, feature: str, agg: str, rule='M'):
+    def draw_plot_by_resample(self, df: pd.DataFrame, feat_date: str, feature: str, agg: str, title: str, rule='M'):
         plt.clf()
-        df = self.date_to_idx(df=df, feature='date')
+        df = self.date_to_idx(df=df, feature=feat_date)
         if agg == 'mean':
             df_sampled = df[feature].resample(rule=rule).mean()
         elif agg == 'sum':
@@ -97,7 +99,27 @@ class Preprocessing(object):
 
         ax = df_sampled.plot.line(x=df_sampled.index, y=df_sampled.values,
                                   figsize=(10, 5), linewidth=0.4)
-        ax.set_xticks([])
-        ax.set_xticks([], minor=True)
+        # ax.set_xticks([])
+        # ax.set_xticks([], minor=True)
         plt.gcf().autofmt_xdate()
+        plt.title(title)
+        plt.savefig(os.path.join('.', 'img', title + '.png'))
+        plt.show()
+
+    def draw_plot_with_hline(self, df: pd.DataFrame, line_feat: str, line_col: str, line_label: str,
+                             h_line_val: float, hline_col: str, hline_label: str,
+                             xlabel:str, ylabel: str, title: str):
+
+        ax = df[line_feat].plot.line(figsize=(15, 6), linewidth=0.8, color=line_col,
+                                     label=line_label)
+        ax.hlines(y=h_line_val,
+                  xmin=df.index[0],
+                  xmax=df.index[-1],
+                  ls='-', linewidth=0.8, color=hline_col,
+                  label=hline_label)
+        ax.set_xlabel(xlabel=xlabel)
+        ax.set_ylabel(ylabel=ylabel)
+        ax.legend()
+        plt.title(title)
+        plt.savefig(os.path.join('.', 'img', title + '.png'))
         plt.show()
