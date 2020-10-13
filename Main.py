@@ -4,6 +4,8 @@ from Preprocessing import Preprocessing
 import os
 import copy
 import pandas as pd
+import datetime as dt
+import matplotlib.pyplot as plt
 
 # Preprocessing Setting
 root_dir = os.path.join('..', 'input')
@@ -29,7 +31,11 @@ discount_19 = discount[(discount['YYYYMMDD'] > 20181231) & (discount['YYYYMMDD']
 discount_20 = discount[discount['YYYYMMDD'] > 20191231]
 
 # View histogram: count of discount change
-prep.draw_histogram(df=discount, feature='chng_cnt', title='Counts of discount change histogram')
+prep.draw_histogram(df=discount, feature='chng_cnt', title='Counts of discount change histogram-total')
+prep.draw_histogram(df=discount_17, feature='chng_cnt', title='Counts of discount change histogram-2017')
+prep.draw_histogram(df=discount_18, feature='chng_cnt', title='Counts of discount change histogram-2018')
+prep.draw_histogram(df=discount_19, feature='chng_cnt', title='Counts of discount change histogram-2019')
+
 
 # View line plot: count of discount change
 prep.draw_line_plot(df=discount_17, x='date', y='chng_cnt', interval=1, title='2017 Discount Change')
@@ -59,7 +65,7 @@ col_remap = {'예약경로': 'rev_route', '예약경로명': 'rev_route_nm', '�
              '대여기간(시간)': 'rent_period_time', '실반납일시': 'real_return_time',
              '실대여기간(일)': 'real_rent_period', '실대여기간(시간)': 'real_rent_time', '차량대여요금(VAT포함)': 'car_rent_fee',
              'CDW가입여부': 'cdw_yn', 'CDW요금구분': 'cdw_fee_kind', 'CDW요금구분명': 'cdw_fee_kind_nm',
-             'CDW요금': 'cdw_fee', '회원등급': 'member_grd','차종': 'car_kind', '구매목적': 'rent_purpose',
+             'CDW요금': 'cdw_fee', '회원등급': 'member_grd', '차종': 'car_kind', '구매목적': 'rent_purpose',
              '내부매출액': 'in_sales', '수납': 'pay_kind', '예약일자': 'rev_date', '할인유형': 'discount_kind',
              '할인유형명': 'discount_kind_nm', '적용할인명': 'apply_discount_nm'}
 
@@ -67,7 +73,7 @@ res.rename(columns=col_remap, inplace=True)
 
 # Drop columns
 drop_cols = ['tot_pay', 'tot_balance', 'in_sales',
-             'cdw_yn','cdw_fee_kind', 'cdw_fee_kind_nm',
+             'cdw_yn', 'cdw_fee_kind', 'cdw_fee_kind_nm',
              'car_grd', 'car_kind', 'rent_purpose', 'pay_kind']
 res = res.drop(columns=drop_cols, axis=1)
 
@@ -75,20 +81,28 @@ res = prep.conv_to_datetime(df=res, str_feat='rent_day', datetime_feat='rent_day
 res = prep.conv_to_datetime(df=res, str_feat='return_day', datetime_feat='return_day', date_format='%Y-%m-%d')
 res = prep.conv_to_datetime(df=res, str_feat='rev_date', datetime_feat='rev_date', date_format='%Y-%m-%d')
 
-# Calculate Sales & Lead Time
+# Calculate Sales
 res['car_rent_fee'] = res['car_rent_fee'].astype(int)
 res['cdw_fee'] = res['cdw_fee'].astype(int)
 res['sales'] = res['car_rent_fee'] + res['cdw_fee']
 
+# Calculate customer reservation lead time
 res['lead_time'] = res['rent_day'] - res['rev_date']
 res['lead_time'] = res['lead_time'].apply(lambda x: x.days)
 res = res.sort_values(by=['rent_day'])
 
-# Seperate dataset by years
-res_17 = copy.deepcopy(res[res['rent_day'] <= pd.to_datetime('20171231', format='%Y-%m-%d')])
+# Calculate sales per times
+res['rent_tot_times'] = res['rent_period'] * 24 + res['rent_period_time']
+res['sales_per_times'] = res['sales'] / res['rent_tot_times']
+
+
+# Separate dataset for each year
+res_17 = copy.deepcopy(res[(res['rent_day'] > pd.to_datetime('20161231', format='%Y-%m-%d')) &
+                           (res['rent_day'] <= pd.to_datetime('20171231', format='%Y-%m-%d'))])
 res_18 = copy.deepcopy(res[(res['rent_day'] > pd.to_datetime('20171231', format='%Y-%m-%d')) &
-                          (res['rent_day'] <= pd.to_datetime('20181231', format='%Y-%m-%d'))])
-res_19 = copy.deepcopy(res[res['rent_day'] >= pd.to_datetime('20190101', format='%Y-%m-%d')])
+                           (res['rent_day'] <= pd.to_datetime('20181231', format='%Y-%m-%d'))])
+res_19 = copy.deepcopy(res[(res['rent_day'] > pd.to_datetime('20181231', format='%Y-%m-%d')) &
+                           (res['rent_day'] <= pd.to_datetime('20191231', format='%Y-%m-%d'))])
 
 #
 res_17_grp_by_rent_day = res_17.groupby('rent_day').mean()
@@ -135,5 +149,53 @@ prep.draw_plot_with_hline(df=res_19_grp_by_rent_day.groupby('rent_day').mean(),
                           line_feat='sales', line_col='k', line_label='Sales',
                           h_line_val=res_19_sales_mean, hline_col='red', hline_label='Average Sales',
                           xlabel='Rental Day', ylabel='Sales (won)', title='2019 Sales')
+
+# Correlation of lead time & sales
+res_17_grp_by_rent_day[['lead_time', 'sales']].corr()  # 0.866
+res_18_grp_by_rent_day[['lead_time', 'sales']].corr()  # 0.827
+res_19_grp_by_rent_day[['lead_time', 'sales']].corr()  # 0.720
+
+res_17_grp_by_rent_day_scaled = prep.scaler(df=res_17_grp_by_rent_day, method='mnmx')
+res_18_grp_by_rent_day_scaled = prep.scaler(df=res_18_grp_by_rent_day, method='mnmx')
+res_19_grp_by_rent_day_scaled = prep.scaler(df=res_19_grp_by_rent_day, method='mnmx')
+
+# Correlation Plot
+
+# 2017 year
+fig, axes = plt.subplots(1, 1)
+res_17_grp_by_rent_day_scaled['lead_time'].plot.line(figsize=(15, 6), linewidth=0.8, alpha=0.7,
+                                                     color='crimson', label='Lead Time', ax=axes)
+res_17_grp_by_rent_day_scaled['sales'].plot.line(figsize=(15, 6), linewidth=0.8, alpha=0.9,
+                                                 color='slateblue', label='Sales', ax=axes)
+axes.legend()
+axes.text(dt.datetime(2017, 11, 17), 0.82, 'Corr: 0.866', style='italic', color='dimgray')
+title = "2017 Lead Time & Sales Correlation"
+plt.title(title)
+plt.savefig(os.path.join('.', 'img', title + '.png'))
+
+# 2018 year
+fig, axes = plt.subplots(1, 1)
+res_18_grp_by_rent_day_scaled['lead_time'].plot.line(figsize=(15, 6), linewidth=0.8, alpha=0.7,
+                                                     color='crimson', label='Lead Time', ax=axes)
+res_18_grp_by_rent_day_scaled['sales'].plot.line(figsize=(15, 6), linewidth=0.8, alpha=0.9,
+                                                 color='slateblue', label='Sales', ax=axes)
+axes.legend()
+axes.text(dt.datetime(2018, 11, 17), 0.82, 'Corr: 0.827', style='italic', color='dimgray')
+title = "2018 Lead Time & Sales Correlation"
+plt.title(title)
+plt.savefig(os.path.join('.', 'img', title + '.png'))
+
+# 2019 year
+fig, axes = plt.subplots(1, 1)
+res_19_grp_by_rent_day_scaled['lead_time'].plot.line(figsize=(15,6), linewidth=0.8, alpha=0.7,
+                                                     color='crimson', label='Lead Time', ax=axes)
+res_19_grp_by_rent_day_scaled['sales'].plot.line(figsize=(15,6), linewidth=0.8, alpha=0.9,
+                                                 color='slateblue', label='Sales', ax=axes)
+axes.legend()
+axes.text(dt.datetime(2019, 11, 17), 0.82, 'Corr: 0.720',
+          style='italic', color='dimgray')
+title = "2019 Lead Time & Sales Correlation"
+plt.title(title)
+plt.savefig(os.path.join('.', 'img', title + '.png'))
 
 print("")
