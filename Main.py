@@ -104,7 +104,9 @@ res_18 = copy.deepcopy(res[(res['rent_day'] > pd.to_datetime('20171231', format=
 res_19 = copy.deepcopy(res[(res['rent_day'] > pd.to_datetime('20181231', format='%Y-%m-%d')) &
                            (res['rent_day'] <= pd.to_datetime('20191231', format='%Y-%m-%d'))])
 
-#
+# ----------------------------- #
+# Analysis based on rental day
+# ----------------------------- #
 res_17_grp_by_rent_day = res_17.groupby('rent_day').mean()
 res_18_grp_by_rent_day = res_18.groupby('rent_day').mean()
 res_19_grp_by_rent_day = res_19.groupby('rent_day').mean()
@@ -114,41 +116,129 @@ res_17_lead_time_mean = res_17['lead_time'].mean()
 res_18_lead_time_mean = res_18['lead_time'].mean()
 res_19_lead_time_mean = res_19['lead_time'].mean()
 
-# Lead Time Plot
+# 2.1 Lead Time Trend
+
+# Annotation List
+# 2017
+lt_annot_2017 = [{'text': 'Holidays', 'xy': (dt.datetime(2017, 1, 27), 21), 'xytext': (dt.datetime(2017, 2, 4), 27),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Peak season', 'xy': (dt.datetime(2017, 5, 1), 40), 'xytext': (dt.datetime(2017, 5, 10), 46),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Peak season', 'xy': (dt.datetime(2017, 7, 26), 42), 'xytext': (dt.datetime(2017, 6, 12), 35),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Holidays', 'xy': (dt.datetime(2017, 9, 26), 50), 'xytext': (dt.datetime(2017, 8, 24), 43),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)}]
+# 2018
+lt_annot_2018 = [{'text': 'Holidays', 'xy': (dt.datetime(2018, 2, 16), 26), 'xytext': (dt.datetime(2018, 2, 26), 31),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Holidays', 'xy': (dt.datetime(2018, 5, 6), 27), 'xytext': (dt.datetime(2018, 5, 16), 32),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Peak season', 'xy': (dt.datetime(2018, 7, 26), 40), 'xytext': (dt.datetime(2018, 6, 12), 35),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Holidays', 'xy': (dt.datetime(2018, 9, 22), 31), 'xytext': (dt.datetime(2018, 8, 22), 36),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)}]
+# 2019
+lt_annot_2019 = [{'text': 'Holidays', 'xy': (dt.datetime(2019, 2, 4), 19), 'xytext': (dt.datetime(2019, 1, 5), 24),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Holidays', 'xy': (dt.datetime(2019, 3, 1), 26), 'xytext': (dt.datetime(2019, 1, 30), 31),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Holidays', 'xy': (dt.datetime(2019, 5, 4), 25), 'xytext': (dt.datetime(2019, 4, 4), 30),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Holidays', 'xy': (dt.datetime(2019, 6, 6), 32), 'xytext': (dt.datetime(2019, 5, 6), 37),
+                  'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Peak season', 'xy': (dt.datetime(2019, 7, 26), 41), 'xytext': (dt.datetime(2019, 6, 12), 36),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Holidays', 'xy': (dt.datetime(2019, 9, 13), 34), 'xytext': (dt.datetime(2019, 9, 23), 29),
+                 'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                 {'text': 'Holidays', 'xy': (dt.datetime(2019, 12, 24), 34), 'xytext': (dt.datetime(2019, 11, 20), 29),
+                  'arrowprops': dict(facecolor='darkblue', shrink=0.05)}]
+
 prep.draw_plot_with_hline(df=res_17_grp_by_rent_day,
                           line_feat='lead_time', line_col='k', line_label='Lead Time',
-                          h_line_val=res_17_lead_time_mean, hline_col='red', hline_label='Average Lead Time',
-                          xlabel='Rental Day', ylabel='Lead Time (days)', title='2017 Lead Time')
+                          h_line_val=res_17_lead_time_mean, hline_col='firebrick', hline_label='Average Lead Time',
+                          xlabel='Rental Day', ylabel='Lead Time (days)', title='Lead Time (2017)', annot=lt_annot_2017)
 
 prep.draw_plot_with_hline(df=res_18_grp_by_rent_day,
                           line_feat='lead_time', line_col='k', line_label='Lead Time',
-                          h_line_val=res_18_lead_time_mean, hline_col='red', hline_label='Average Lead Time',
-                          xlabel='Rental Day', ylabel='Lead Time (days)', title='2018 Lead Time')
+                          h_line_val=res_18_lead_time_mean, hline_col='firebrick', hline_label='Average Lead Time',
+                          xlabel='Rental Day', ylabel='Lead Time (days)', title='Lead Time (2018)', annot=lt_annot_2018)
 
 prep.draw_plot_with_hline(df=res_19_grp_by_rent_day,
                           line_feat='lead_time', line_col='k', line_label='Lead Time',
-                          h_line_val=res_19_lead_time_mean, hline_col='red', hline_label='Average Lead Time',
-                          xlabel='Rental Day', ylabel='Lead Time (days)', title='2019 Lead Time')
+                          h_line_val=res_19_lead_time_mean, hline_col='firebrick', hline_label='Average Lead Time',
+                          xlabel='Rental Day', ylabel='Lead Time (days)', title='Lead Time (2019)', annot=lt_annot_2019)
 
-# Sales Plot
+# 2.2 Sales by Rental Days
 res_17_sales_mean = res_17['sales'].mean()
 res_18_sales_mean = res_18['sales'].mean()
 res_19_sales_mean = res_19['sales'].mean()
 
+# 2.2.1 Sales Trend
+
+# Annotation List
+# 2017
+sales_annot_2017 = [{'text': 'Holidays', 'xy': (dt.datetime(2017, 1, 27), 175000),
+                     'xytext': (dt.datetime(2017, 2, 4), 195000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Peak season', 'xy': (dt.datetime(2017, 5, 1), 230000),
+                     'xytext': (dt.datetime(2017, 5, 10), 250000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Peak season', 'xy': (dt.datetime(2017, 7, 26), 330000),
+                     'xytext': (dt.datetime(2017, 6, 12), 310000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Holidays', 'xy': (dt.datetime(2017, 9, 26), 300000),
+                     'xytext': (dt.datetime(2017, 8, 24), 280000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)}]
+# 2018
+sales_annot_2018 = [{'text': 'Holidays', 'xy': (dt.datetime(2018, 2, 16), 210000),
+                     'xytext': (dt.datetime(2018, 2, 26), 240000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Holidays', 'xy': (dt.datetime(2018, 5, 6), 200000),
+                     'xytext': (dt.datetime(2018, 5, 16), 230000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Peak season', 'xy': (dt.datetime(2018, 7, 26), 320000),
+                     'xytext': (dt.datetime(2018, 6, 12), 290000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Holidays', 'xy': (dt.datetime(2018, 9, 22), 270000),
+                     'xytext': (dt.datetime(2018, 8, 22), 300000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)}]
+# 2019
+sales_annot_2019 = [{'text': 'Holidays', 'xy': (dt.datetime(2019, 2, 4), 170000),
+                     'xytext': (dt.datetime(2019, 1, 5), 200000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Holidays', 'xy': (dt.datetime(2019, 3, 1), 135000),
+                     'xytext': (dt.datetime(2019, 1, 30), 165000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Holidays', 'xy': (dt.datetime(2019, 5, 4), 190000),
+                     'xytext': (dt.datetime(2019, 4, 4), 220000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Holidays', 'xy': (dt.datetime(2019, 6, 6), 180000),
+                     'xytext': (dt.datetime(2019, 5, 6), 210000),
+                     'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Peak season', 'xy': (dt.datetime(2019, 7, 26), 310000),
+                     'xytext': (dt.datetime(2019, 6, 12), 280000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Holidays', 'xy': (dt.datetime(2019, 9, 13), 205000),
+                     'xytext': (dt.datetime(2019, 9, 23), 235000),
+                    'arrowprops': dict(facecolor='darkblue', shrink=0.05)},
+                    {'text': 'Holidays', 'xy': (dt.datetime(2019, 12, 24), 190000),
+                     'xytext': (dt.datetime(2019, 11, 20), 220000),
+                     'arrowprops': dict(facecolor='darkblue', shrink=0.05)}]
+
 prep.draw_plot_with_hline(df=res_17_grp_by_rent_day,
                           line_feat='sales', line_col='k', line_label='Sales',
                           h_line_val=res_17_sales_mean, hline_col='red', hline_label='Average Sales',
-                          xlabel='Rental Day', ylabel='Sales (won)', title='2017 Sales')
+                          xlabel='Rental Day', ylabel='Sales (won)', title='2017 Sales', annot=sales_annot_2017)
 
 prep.draw_plot_with_hline(df=res_18_grp_by_rent_day,
                           line_feat='sales', line_col='k', line_label='Sales',
                           h_line_val=res_18_sales_mean, hline_col='red', hline_label='Average Sales',
-                          xlabel='Rental Day', ylabel='Sales (won)', title='2018 Sales')
+                          xlabel='Rental Day', ylabel='Sales (won)', title='2018 Sales', annot=sales_annot_2018)
 
 prep.draw_plot_with_hline(df=res_19_grp_by_rent_day.groupby('rent_day').mean(),
                           line_feat='sales', line_col='k', line_label='Sales',
                           h_line_val=res_19_sales_mean, hline_col='red', hline_label='Average Sales',
-                          xlabel='Rental Day', ylabel='Sales (won)', title='2019 Sales')
+                          xlabel='Rental Day', ylabel='Sales (won)', title='2019 Sales', annot=sales_annot_2019)
 
 # Correlation of lead time & sales
 res_17_grp_by_rent_day[['lead_time', 'sales']].corr()  # 0.866

@@ -111,7 +111,7 @@ class Preprocessing(object):
     @staticmethod
     def draw_plot_with_hline(df: pd.DataFrame, line_feat: str, line_col: str, line_label: str,
                              h_line_val: float, hline_col: str, hline_label: str,
-                             xlabel: str, ylabel: str, title: str):
+                             xlabel: str, ylabel: str, title: str, annot=None):
         plt.clf()
         ax = df[line_feat].plot.line(figsize=(15, 6), linewidth=0.8, color=line_col,
                                      label=line_label)
@@ -122,6 +122,10 @@ class Preprocessing(object):
                   label=hline_label)
         ax.set_xlabel(xlabel=xlabel)
         ax.set_ylabel(ylabel=ylabel)
+        if annot:
+            for i in range(len(annot)):
+                temp = annot[i]
+                ax.annotate(text=temp['text'], xy=temp['xy'], xytext=temp['xytext'], arrowprops=temp['arrowprops'])
         ax.legend()
         plt.title(title)
         plt.savefig(os.path.join('.', 'img', title + '.png'))
