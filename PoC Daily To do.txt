@@ -1,0 +1,285 @@
+-------------------------------------------------------------
+## 롯데렌터카 Dynamic Pricing PoC ##
+-------------------------------------------------------------
+
+- Wifi: PJT_Rental / rental@ap1
+- IP setting
+	- SSID: 10.106.13.49
+	- 255.255.255.0
+	- IP: 10.106.13.1
+	- 서브넷마스크: 10.106.3.25
+	- 기본게이트웨이: 10.106.3.26
+	- 기본 DNS 서버: 10.106.13.49
+	- 보조 DNS 서버: 255.255.255.0
+- 공유폴더 접송정보: dp2020@lotterental.net / rent2020!@
+- DRM 계정: ID P20026 
+- SAP 데이터 담당: 박지혜 (jihyepark@lotte.net)
+
+-------------------------------------------------------------	
+# Notice #
+
+- Daily 진행사항 + Issue 메일링
+	- 수신: 김상욱 책임(sangwook-kim@lotte.net)
+	- 참조
+		- DT 추진팀: 김종훈 팀장(jonghoon.kim1@lotte.net)
+		- IT 전략팀: 이상환 팀장(lee.sanghwan@lotte.net)
+					손창호 수석(changho.son@lotte.net)
+					김명희 첵임(myeonghee.kim@lotte.net)
+		- 오토렌탈운영팀: 곽용진 팀장(yongjin.kwak@lotte.net)
+					   서영건 책임(younggun.seo@lotte.net)
+					   서대원 사원(daewon.seo@lotte.net)
+					   
+- 주간회의: 목요일(오후 4시)
+	- 주긴보고 format: 금주 Done List / 차주 To do List / Issue
+	
+- 제주지점 meeting 일정 fix 
+	- Meeting 날짜 check: 19~20
+	- Question list up 
+		- Lead time 구간의 기준설정
+		- Dynamic Pricing 적용 방식
+-------------------------------------------------------------	
+# Memo #
+
+- 제주지점: 성수기/비수기 개념 x
+- 할인율 변경에 대한 lead time의 개념은 정의되어있지 않음
+	- 할인율 변경 기간 유동적
+	- 최초의 할인율 선정: 3개월 이전(이전 분기)
+- 대여일 기준 Lead time
+- 결과물은 예약구간(예약일) 기준으로 view
+- 모델은 대여일 기준 Lead time 구간 별 적용
+- 예외적 할인율(임직원 할인, ...) 적용 데이터에 대한 예외 처리 필요(outlier)
+
+- 매출계: 차량대여요금 + cdw요금 + (유류비) + (사고금액)
+-------------------------------------------------------------	
+# Strategy #
+
+- Benchmarking 방법 & 산출물
+	- Goal: Concept / Test 방법
+	- Search
+		- Paper: Dynamic Pricing model
+		- 업계 활용 현황
+			- Car sharing: Uber/쏘카
+			- Hospitality: Airbnb/Hotel
+			- Airline: Airline booking application
+			- E-commerce: Amazon/Zara
+		
+- Assumption
+	- 월별 운용 대수는 전년도의 월별 평균 활용
+			
+- Simulation Model Formular
+	- Statistical Learning -> Simulation Matrix
+	
+		# Model 1 (Demand Forecast)
+		: Lead time 구간 별 예약건수 예측 -> 누적 예약건수 graph 추가
+			- Input
+				- Lead time
+				- Seasonality + Event
+					- Seasonality: 비수기/준성수기/성수기/극성수기
+					- Event: 공휴일 x/o
+				- 입도객(Potential rental demand)
+					- 전년도 트렌드 유지 or 수요 예측
+			- 과거 같은 기간의 누적 예약 건수 graph 표현
+			
+		# Model 2 (Price Optimization)
+		: Lead time 구간 별 최적 Price 
+			- Pricing 모델에 대한 Input factor 정의
+				- Lead time
+				- Seasonality & Event
+				- 입도객(Potential rental demand)
+				- 예약현황(# of Reservation / # of cars)
+				
+		# View 1
+		: Model 1+2 기반 Lead time 구간 별 예상 매출 산출
+			- 각 Lead time 구간 별 예상 매출(Target Sales) 산출
+		
+- Result Data Handling & View Point -> 팀장님!
+	- Result Data -> View Method
+	- 당일 기준 2M ~ 3M 기간의 예약일 open
+		- 각 예약일 기준 lead time 구간 별 pricing 제시
+		- 60~90 days
+	- Dynamic pricing UI
+	
+- A/B Testing
+	- A/B Testing matrix 정의
+	- 단기간에 파악 할 수 있는 지표
+-------------------------------------------------------------
+# Issue #
+
+- DRM 계정 발급지연 -> 공유폴더 파일 접근 x
+- 기존의 search 및 예약을 위해 접속하는 고객의 패턴을 control 할 수 없음
+	-> 할인율 정책에 대한 promotion 필요
+-------------------------------------------------------------
+# Daily Schedule #
+ 	
+[20.10.05]
+- 내부데이터 요청
+	- 데이터 기준
+		- 차종: 제주도 준중형 차종
+		- 기간: 2017년 말 ~ 2020년
+		
+	- View point 기반 필요 데이터 list up
+		- 예약 실적 raw 데이터 (*할인율 변경 유무 확인 필요)
+		- 일/Lead time 별 예약 현황 (Demand)
+		- 일/Lead time 별 취소 현황 (Demand)		
+		- 기간별 할인율 (Price)
+		- 기간별 가동 차량수 (Capa)
+		
+- 외부데이터 확인
+	- 제주 입도객 데이터 (제주관광협회): 롯데렌터카 내부확보
+	
+[20.10.06]
+- PoC 환경 셋팅 (진행)
+	- 보안 프로그램 설치 및 내부망 연결 (완료)
+	- DRM 계정 받기 - 김선진 대리 (완료) 
+
+- Dynamic Pricing Benchmark (진행)
+	- Commercial Application
+		- Car Sharing
+			- Uber: 'surge' pricing
+		- Hospitality
+			- Airbnb
+				- Booking probability model: Gradient Boosting Machine
+				- Pricing strategy model: Customized non-linear function
+										  (e-insensitive loss function concept)		
+		- E-commerce platform
+			- Amazon: change prices every 15 minutes 
+		- Etc
+			- Zara: systematic dynamic markdown pricing
+					(Clearnace Pricing Optimization)
+					
+	- Approach & Method
+		- Statistical Learning
+			- Non-linear Regression
+		- Price Optimization
+		- Stochastic Model
+			- Diffusion model
+				- selling price + amount of cumulative sales
+			- Poisson Process + Hamilton-Jacobi-Bellman equation
+		- Bayesian Dynamic Pricing Policy
+		- Reinforcement Learning
+			-*MAB(multi armed bandit)
+			- Q-learning
+
+[20.10.07]
+- PoC 환경 셋팅 (진행)
+	- 공유폴더 파일 확인 (완료)
+	- 메일서버 유해사이트 해제 요청 - 정보보안팀 (진행) 
+
+- 롯데렌터카 내부데이터 분석 (진행)
+	- 내부데이터 List up
+		- 단기계약 리스트(5월)
+		- 책임손익계산서 -> 매출액 / 영업이익
+		- 기간별 차량 가동률
+		- 기간별 할인율 변경 list
+	- 추가데이터 요구사항
+		- 제주지점 할인율 변경승인 list: 17년3Q /17년4Q
+		- 단기 계약 리스트: 2017.01 ~ 2019.12 (할인율 변경 정책 이전/이후 매출변화) 
+			- 필드: 대여지점/계약상태/예약채널/차량모델/차급/예약일자/대여일자/대여시간/반납일자/
+				   반납시간/대여일수/계약번호/대여료/할인코드/cdw금액/매출계/리드타임		
+		- 가동률 차량현황(평균): 2018.01 ~ 2019.12
+	- Question
+		- 2020년 할인율 기준: 비회원/일반/골드/더블골드 -> 일반
+		- 할인율 준중형 속하는 category: 소형/중형 -> 소형
+		
+- 데이터 전처리
+	- 할인율 데이터 작업
+		- Lead time 정의
+			- Benchmark Reaserch
+			- 롯데렌터카 고객 예약 트렌드 분석
+			- Lead time concept 초안 작성
+		- Lead time에 대한 기준 확정 필요 -> 제주지점과 논의(추후)
+
+[20.10.08]
+- 데이터 전처리 (완료)
+	- Lead Time 별 할인율 변경 데이터 생성
+		- 할인율 적용 트렌드 분석
+		- Lead Time 구간 별 변경사항 입력
+		
+- Dynamic Pricing 전략 벤치마킹 (진행)
+	- 상업 Application
+		- Uber: Surge pricing 기반 가격 최적화
+		- Airbnb: 수요 / 리드타임 / 시간 변수 기반 가격 최적화 
+		- Zara: Clearance Pricing 기반 가격 최적화
+	- 모델링 Approach
+		- Statistical Learning / Stochastic Model
+		- Reinforcement Learning: MAB / Q-learning
+		
+[차주 진행 예정사항]		
+- 내부데이터 분석
+	- 고객 lead time 기준 예약시기 분석 -> histogram(비수기 / 성수기 + 연휴기간)
+	- 할인율 변경정책 빈도수에 따른 매출변화 분석
+- Dynamic Pricing 전략 벤치마킹
+
+[20.10.12]
+- 데이터 전처리 
+    - 단기계약 리스트 데이터
+		- 분석 요건 기준 필드 정리
+        - 분석 요건 기준 데이터 병합
+
+- 데이터 분석
+    - Lead Time 기준 할인율 변화 영향도 분석
+		- 대여일자 별 Lead time 변화
+		- 대여일자 별 매출액 변화
+		- 대여일자 별 할인율 변화
+		
+[20.10.13]
+- 데이터 분석
+	- 대여일 기준
+		- 매출액
+			- 평균 매출액: 성수기&연휴 ↑ / 비수기 ↓
+			- 시간당 평균 매출액: 성수기&연휴 ↑ / 비수기 ↓
+		- Lead Time
+			- 성수기&연휴 ↑ / 비수기 ↓
+	- 상관분석
+		- 고객의 예약 lead time과 평균 매출액의 상관도 ↑↑
+		- 고객의 예약 lead time과 시간당 평균 매출액의 상관도 ↑
+			- Lead time이 시간당 평균 매출액에 후행하는 경향 존재
+		- 평균 매출액과 시간당 평균 매출액의 상관도 ↑↑
+
+# 이슈
+- 단기계약 리스트 : 할인율 데이터 누락 (추가요청 진행)
+
+[20.10.14]
+- 롯데렌터카 제주지점 출장
+	- 제주지점 meeting 자료 준비 
+		- Dynamic Pricing 적용시 매출이 올라가는 근거 자료 필요 
+		- 제주도 입도객 예측을 위한 활용 데이터 필요
+			- 제주도 입도객 데이터 기반 예측
+			- 항공데이터 API 확인
+			
+- 데이터 분석
+	- 제주 입도객 시계열 분해
+	- 할인율 vs 매출액/Lead time
+	- 매출액 vs 제주입도객
+	
+- 외부데이터 수집
+	- 제주 입도객(일별)
+		- 2019년 데이터 수집
+		- 입도객 기반 월별 수요예측(제주지점 활용중) 
+		
+[20.10.15]
+- 데이터 전처리 및 분석
+	- 단기계약 데이터 -> 할인율 데이터 반영
+	- 할인율 기반 연관도 분석
+
+- 제주지점 미팅 사전 논의 및 준비
+    - 미팅 일정 및 내용 사전 조율
+
+- 주간업무보고
+    - 주간업무 내용 및 이슈 공유 
+    - 추가 요청사항 정리
+
+[20.10.16]
+- 제주 출장계획서 제출 -> 김명희 책임
+- 내부데이터 분석
+	- 비시즌 vs 성수기/연휴
+		- 비시즌 월별 분석 -> 비시즌 분류 여부 판단
+		- 성수기 / 연휴 구분
+			- 성수기 분류 여부 판단: 준성수기/성수기/극성수기
+	- 성수기/연휴를 제외한 비시즌의 월별 트렌드 -> 비시즌 등급화 가능여부 확인
+		- 대여일기준 예약건수 기준
+		- 대여일 기준 예약건수의 누적 함수 트렌드
+		  + lead time 일별 평균 매출액 트렌드
+		  + lead time 일별 평균 할인율 트렌드(%)
+		  + 일별 평균 매출액 누적(reverse) 트렌드(%) 
+		- 대여잔량: capa - 총 대여량
