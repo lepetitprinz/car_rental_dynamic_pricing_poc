@@ -353,20 +353,32 @@
 	- Evaluate price suggestion
 	
 	- Issue
-		- don't have ground-truth of optimal Price -> Problem on evaluating pricing suggestion
+		- don't have ground-truth of optimal Price 
+		  -> Problem on evaluating pricing suggestion
 	- outData
 		- 비회원기준 할인율
 		- 각 할인 등급별 할인율 차이 데이터
 
 [20.10.22]
-- 제주지점 meeting
-	- Meeting ppt 자료 준비
-		- 제안서 기준 시나리오 작성
-			- Dynamic Pricing 취지 / 목적
-			- 타사 사례(벤치마킹)
-				- 해외: Airbnb / Uber
-				- 국내: 그린카
-			- 데이터 기반 insight 분석 내용
-				- 시즌 분리 / 리드타임 별 예약현황 -> DP 적용범위 논의 필요
-			- To be 및 기대효과
-				- DP 적용범위 / 적용방식
+- 제주지점 meeting ppt 자료 준비 (진행)
+	- 제안서 기준 시나리오 작성
+		- Dynamic Pricing 취지 / 목적
+		- 데이터 분석 insight 
+			- 시즌 분리 / 리드타임 별 예약현황 -> DP 적용범위 논의 필요
+			- 입도객 기준 예약 / 매출액 현황
+		- 타사 사례(벤치마킹)
+			- 비교 장표 및 적용예정 컨셉 정리
+			- 해외: Airbnb / Uber / Zara
+			- 국내: 그린카
+		- To be 및 기대효과
+			- DP 적용범위 / 적용방식(엑셀 / base line)
+			- 적용 before & after
+				
+- 차종별 가동현황 확인 (완료)
+	- 2018년: 차량별 가동률 차이가 높음 -> 가동률 낮은 차량 일부 제외
+	- 2019년: 차량별 가동률 차이 거의 없음
+- 할인율 vs 매출 불일치 이슈 확인 (완료)
+
+[20.10.23]
+- 내부데이터 분석 관련 Question 정리 및 전달(10.23)
+- 그린카 벤치마킹 필요 자료 정리
