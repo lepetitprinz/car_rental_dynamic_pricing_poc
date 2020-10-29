@@ -435,7 +435,6 @@
 		- To be 및 기대효과
 			- DP 적용범위 / 적용방식(엑셀 / base line)
 
-
 [20.10.27]
 - 외부데이터 추가
 	- 제주 입도객 2018/2020 (jeju_daily.csv)
@@ -443,6 +442,24 @@
 - To be Process 기반 모델 설계 및 개발
 	- 모델 정의
 		- Boosting / Tree Model
-		- 
-	- 모델 개발
-- 
+		- Regression(Linear/Logistic)
+	- 데이터 전처리
+		- input / target feature 정의
+		- input / target data handling
+		
+[20.10.28]
+- 제주입도객 2018/2020년 데이터 추가
+- 20년 데이터 추가
+- 모델 개발
+	- 예약건수 예측 모델 개발
+	- 가격 예측모델 개발	
+- 제주지점 meeting ppt 수정
+	- 각 꼭지별 목차 장표 추가 (완료)
+	- 분석 결과 + to be 프로세스 연계장표 추가
+	- 영업 활용 To be 장표 추가 (완료)
+- 추가 분석사항
+	- 차종별 예약 리드타임 데이터 산출
+
+
+
+
