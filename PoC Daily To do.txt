@@ -36,13 +36,7 @@
 		- 참조: 이상환 팀장(lee.sanghwan@lotte.net)
 			   손창호 수석(changho.son@lotte.net)
 			   탁아영 대리(ayoungtak@lotte.net)
-	
-- 제주지점 meeting 일정 fix 
-	- Meeting 날짜: 30
-	- 출장계획서 제출(탁아영 대리)
-	- Question list up 
-		- Lead time 구간의 기준설정
-		- Dynamic Pricing 적용 방식
+
 -------------------------------------------------------------	
 # Memo #
 
@@ -460,6 +454,12 @@
 - 추가 분석사항
 	- 차종별 예약 리드타임 데이터 산출
 
-
-
-
+[20.10.29]
+- 제주지점 meeting 준비
+	- 회의자료 최종 수정
+	
+[20.11.2]
+- 2020년 계절성 데이터 추가(discount_season) (완료)
+- 리드타임 변수화 (완료)
+- DP 적용 시작시점 공유(11.3까지)
+	- 대여일 적용기간: 
