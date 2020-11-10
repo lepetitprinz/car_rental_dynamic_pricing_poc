@@ -40,6 +40,15 @@
 -------------------------------------------------------------	
 # Memo #
 
+- 1.6급 차량
+ALL NEW K3 (G)
+THE NEW K3 (G)
+더 올 뉴 벨로스터 (G)
+아반떼 AD (G)
+아반떼 AD (G) F/L
+올 뉴 아반떼 (G)
+아이오닉 (H)
+
 - 할인율 변경에 대한 lead time의 개념은 정의되어있지 않음
 	- 할인율 변경 기간 유동적
 	- 최초의 할인율 선정: 3개월 이전(이전 분기)
@@ -525,11 +534,29 @@
 - 수요예측 모델 
     - 제주 입도객 데이터(내국/외국 구분)
 	- Time Series 모델
+		- AR
 		- ARIMA
-		- Holt-winters
-		- 
+		- Holt-winters 
 
+[20.11.09]
+- 입도객 데이터 최신화(~20.10)
+- 데이터 정의서 작성
+	- input / output 데이터 정의
+		- input
+			- jeju_visit_daily (Model 1)
+				- 최신 1년 데이터
+			- res_result (Model 2)
+			- res_curr (Model 2)
+			- discount_season (Model 2)
+			- discount_type (Model 2)	
+		- output
+			- jeju_visit_exp
+				- 3개월 예측: 월별 수요 변화율 계산
+			- rec_result	
+		
 - 누적 예약건수 예측모델
-	- 데이터 누적 예약건수 형태로 변형
+	- 데이터 누적 예약 형태로 전환
 	- Hyperparameter Tuning
 	
+[20.11.10]
+-
