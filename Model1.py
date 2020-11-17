@@ -32,7 +32,7 @@ class MODEL1(object):
     def _filter_periods(self):
         return self.visitor[(self.visitor['date'] >= self.start_date) & (self.visitor['date'] <= self.end_date)]
 
-    def training(self, n_test: int, test_models: list, param_grids: dict):
+    def train(self, n_test: int, test_models: list, param_grids: dict):
         data = self._filter_periods()
 
         # String date convert to datetime
@@ -65,7 +65,7 @@ class MODEL1(object):
             pickle.dump(best_model_params, f)
             f.close()
 
-    def prediction(self, pred_step: int):
+    def predict(self, pred_step: int):
         # Load best parameters for model
         best_params = {}
         for visit in ['dom', 'for']:
