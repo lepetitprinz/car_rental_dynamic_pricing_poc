@@ -44,6 +44,7 @@ class MODEL2(object):
         self.day_to_season: dict = {}
         self.day_to_init_disc: dict = {}
         self.mon_to_init_capa: dict = {}
+        self.avg_unavail_capa = 2
         # Lead time
         self.lt: np.array = []
         self.lt_vec: np.array = []
@@ -71,7 +72,7 @@ class MODEL2(object):
 
         print('Training finished')
 
-    def predict(self):
+    def predict(self, pred_days: list):
         # Split into input and output
         m2_io = self._split_input_target_all()
 
@@ -84,9 +85,10 @@ class MODEL2(object):
         # fit the model
         fitted = self._fit_model(dataset=m2_io, regr='extr', params=extr_bests)
 
-        pred_day = '2020-12-18'
+        for pred_day in pred_days:
+            self._pred(pred_day=pred_day, fitted_model=fitted)
 
-        lt_to_pred_result = self._pred(pred_day=pred_day, fitted_model=fitted)
+        print("Model 2 Prediction is finished")
 
     def _pred(self, pred_day: str, fitted_model: dict):
         # Get season value and initial discount rate
@@ -96,9 +98,9 @@ class MODEL2(object):
 
         # Set initial capacity of model
         pred_mon = pred_day.split('-')[0] + pred_day.split('-')[1]
-        init_capa = {'av': self.mon_to_init_capa[(pred_mon, 'AVANTE')],
-                     'k3': self.mon_to_init_capa[(pred_mon, 'AVANTE')],
-                     'vl': self.mon_to_init_capa[(pred_mon, 'AVANTE')]}
+        init_capa = {'av': self.mon_to_init_capa[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
+                     'k3': self.mon_to_init_capa[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
+                     'vl': self.mon_to_init_capa[(pred_mon, 'AVANTE')] - self.avg_unavail_capa}
 
         # Make initial values dataframe
         pred_input = pd.DataFrame({'season': season, 'lead_time': self.lt_vec, 'discount': init_disc})
@@ -108,7 +110,16 @@ class MODEL2(object):
         # Map lead time to prediction results
         lt_to_pred_result = self._get_lt_to_pred_result(pred_result=pred_result)
 
-        return lt_to_pred_result
+        result = self._map_rslt_to_lead_time(pred_final=lt_to_pred_result)
+
+        # Result data convert to dataframe
+        result_df = self._conv_to_dataframe(result=result, pred_datetime=pred_datetime,
+                                        init_disc=init_disc, init_capa=init_capa)
+
+        # Save the result dataframe
+        self._save_result(result=result_df, pred_day=pred_day)
+
+        print(f'Prediction result on {pred_day} is saved')
 
     ####################################
     # 2. Data & Variable Initialization
@@ -320,7 +331,11 @@ class MODEL2(object):
             pred_models = {}
             for model_key, model_val in type_val.items():
                 pred = model_val.predict(pred_input)
-                pred_models[model_key] = np.round(pred, 3)
+                if (type_key == 'cnt') or (type_key == 'disc'):
+                    pred = np.round(pred, 1)
+                else:
+                    pred = np.round(pred, 3)
+                pred_models[model_key] = pred
             pred_results[type_key] = pred_models
 
         return pred_results
@@ -335,3 +350,38 @@ class MODEL2(object):
             lt_to_pred_result[type_key] = lt_to_models
 
         return lt_to_pred_result
+
+    def _map_rslt_to_lead_time(self, pred_final: dict):
+        result = defaultdict(list)
+        for type_key, type_val in pred_final.items():   # type_key: cnt / disc / util
+            for model_key, model_val in type_val.items():   # model_key: av / k3 / vl
+                rslt = [model_val[self.lt_to_lt_vec[i]] for i in self.lt]
+                result[model_key].append({type_key: rslt})
+
+        return result
+
+    def _conv_to_dataframe(self, result: dict, pred_datetime: dt.datetime,
+                           init_disc: int, init_capa: dict):
+        date = [pred_datetime - dt.timedelta(days=int(i*-1)) for i in self.lt]
+        lead_time = self.lt
+        curr_disc = init_disc
+
+        model_df = {}
+        for model_key, model_val in result.items():
+            df = pd.DataFrame({'date': date, 'lead_time': lead_time, 'curr_disc': curr_disc})
+            for type in model_val:
+                type_key = list(type.keys())[0]
+                type_val = list(type.values())[0]
+                df['exp_' + type_key] = type_val
+
+            # Calculate utilization count
+            df['exp_util_cnt'] = df['exp_util'] * init_capa[model_key]
+            model_df[model_key] = df
+
+        return model_df
+
+    def _save_result(self, result: dict, pred_day: str):
+        save_path = os.path.join('..', 'result', 'data', 'prediction')
+        for model_key, model_val in result.items():
+            model_val.to_csv(os.path.join(save_path, 'original', model_key,
+                                          'm2_pred(' + pred_day + ').csv'), index=False)
