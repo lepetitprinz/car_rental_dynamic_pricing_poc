@@ -32,11 +32,13 @@ class MODEL3(object):
         for pred_day in pred_days:
             # Load dataset
             self._load_data(pred_day=pred_day)
+
             # Preprocessing
-            self._prep_data()
-            self._merge_hx_curr_df()    # Set recommendation input
+            self._drop_column()                 # Drop columns
+            self._rename_column()               # Rename columns
+            self._merge_hx_curr_df()            # Set recommendation input
             self._fill_na(pred_day=pred_day)    # Forward fill
-            self._set_exp_dmd_change(pred_day=pred_day)
+            self._set_exp_dmd_change(pred_day=pred_day)    #
             self._filter_date(apply_day=apply_day)
             self._scale_data()
 
@@ -47,43 +49,32 @@ class MODEL3(object):
             rec_output_renamed = self._rename_col_kor(rec_output=rec_output_rearranged)
 
             # Save result on each day
-            # self._save_result(pred_day=pred_day, rec_output=rec_output_renamed)
+            self._save_result(pred_day=pred_day, rec_output=rec_output_renamed)
 
             fst_rec_data = self._get_fst_rec_data(rec_output=rec_output_renamed, pred_day=pred_day)
 
             for model, series in fst_rec_data.items():
                 summary[model].append(series)
 
-        summary_df = {}
-        for model, data in summary.items():
-            df = pd.DataFrame(data)
-            df = df.drop(columns=['날짜'])
-            df = df[['대여일', '리드타임', '현재 예약건수', '현재 가동대수(시간)', '현재 가동률', '현재 할인율', '이용가능대수',
-                     '기대 예약건수', '기대 가동대수(시간)', '기대가동률', '기대 할인율', '추천 할인율']]
-            summary_df[model] = df
+        # Filter and rearrange summary dataframe
+        summary_df = self._filter_rearng_summary(summary=summary)
 
+        # Save summary results
         self._save_summary_result(summary=summary_df, apply_day=apply_day)
-        print("Recommendation finished")
-
-    def _save_summary_result(self, summary: dict, apply_day: str):
-        apply_day_str = ''.join(apply_day.split('/'))
-        save_path = os.path.join('..', 'result', 'data', 'recommend', 'summary')
-        for model, df in summary.items():
-            df.to_csv(os.path.join(save_path, 'rec_summary_' + model + '(' + apply_day_str + ').csv'),
-                      index=False, encoding='euc-kr')
-            df.T.to_csv(os.path.join(save_path, 'rec_summary_' + model + '_T(' + apply_day_str + ').csv'),
-                        header=False, encoding='euc-kr')
-
-    def _get_fst_rec_data(self, rec_output: dict, pred_day):
-        fst_rec_data = {}
-        for model, df in rec_output.items():
-            data = df.iloc[0, :]
-            data['대여일'] = pred_day
-            fst_rec_data[model] = data
-
-        return fst_rec_data
+        print("Recommendation Process is finished")
 
     def _save_result(self, pred_day: str, rec_output: dict):
+        df_merged = pd.DataFrame()
+        for model, df in rec_output.items():
+            df_merged = pd.concat([df_merged, df], axis=1)
+
+        save_path = os.path.join('..', 'result', 'data', 'recommend')
+        df_merged.to_csv(os.path.join(save_path, 'original', 'rec(' + pred_day + ').csv'),
+                         index=False, encoding='euc-kr')
+        df_merged.T.to_csv(os.path.join(save_path, 'transpose', 'rec_T(' + pred_day + ').csv'),
+                          header=False, encoding='euc-kr')
+
+    def _save_result_BAK(self, pred_day: str, rec_output: dict):
         save_path = os.path.join('..', 'result', 'data', 'recommend')
         for model, df in rec_output.items():
             df.to_csv(os.path.join(save_path, 'original', 'rec_' + model + '(' + pred_day + ').csv'),
@@ -230,12 +221,6 @@ class MODEL3(object):
         self.curr_res_cnt = self._split_by_model(df=res_cnt[res_cnt['rent_day'] == pred_day])
         self.curr_res_util = self._split_by_model(df=res_util[res_util['rent_day'] == pred_day])
 
-    def _prep_data(self):
-        # Drop columns
-        self._drop_column()
-        # Reanme columns
-        self._rename_column()
-
     def _rename_column(self):
         for df in self.curr_res_cnt.values():
             df.rename(columns={'res_cum_cnt': 'curr_cnt'}, inplace=True)
@@ -262,7 +247,6 @@ class MODEL3(object):
             'k3': df[df['model'] == 'K3'],
             'vl': df[df['model'] == 'VELOSTER']}
 
-
     def _rec_disc_function(self, curr: float, exp: float, dmd: float):
         """
         Customized Exponential function
@@ -283,3 +267,32 @@ class MODEL3(object):
             y = 1 - theta1 * (curr ** (phi_low ** (-1 * ((1 - curr) * theta2 * dmd))) - exp)
 
         return y
+
+    def _get_fst_rec_data(self, rec_output: dict, pred_day: str):
+        fst_rec_data = {}
+        for model, df in rec_output.items():
+            data = df.iloc[0, :]
+            data['대여일'] = pred_day
+            fst_rec_data[model] = data
+
+        return fst_rec_data
+
+    def _filter_rearng_summary(self, summary: dict):
+        summary_df = {}
+        for model, data in summary.items():
+            df = pd.DataFrame(data)
+            df = df.drop(columns=['날짜'])
+            df = df[['대여일', '리드타임', '현재 예약건수', '현재 가동대수(시간)', '현재 가동률', '현재 할인율', '이용가능대수',
+                     '기대 예약건수', '기대 가동대수(시간)', '기대가동률', '기대 할인율', '추천 할인율']]
+            summary_df[model] = df
+
+        return summary_df
+
+    def _save_summary_result(self, summary: dict, apply_day: str):
+        apply_day_str = ''.join(apply_day.split('/'))
+        save_path = os.path.join('..', 'result', 'data', 'recommend', 'summary')
+        for model, df in summary.items():
+            df.to_csv(os.path.join(save_path, 'rec_summary_' + model + '(' + apply_day_str + ').csv'),
+                      index=False, encoding='euc-kr')
+            df.T.to_csv(os.path.join(save_path, 'rec_summary_' + model + '_T(' + apply_day_str + ').csv'),
+                        header=False, encoding='euc-kr')

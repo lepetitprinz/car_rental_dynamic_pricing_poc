@@ -15,7 +15,7 @@ class MODEL2(object):
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
-    def __init__(self):
+    def __init__(self, curr_res_day: str):
         self.load_path = os.path.join('..', 'result', 'data', 'model_2')
         self.load_model_path = os.path.join('..', 'result', 'model', 'model_2')
         self.save_path = os.path.join('..', 'result', 'model', 'model_2')
@@ -41,6 +41,8 @@ class MODEL2(object):
 
         # Prediction variables
         # Initial values of variables
+        self.curr_res_day = curr_res_day
+        self.day_to_init_res_cnt: dict = {}
         self.day_to_season: dict = {}
         self.day_to_init_disc: dict = {}
         self.mon_to_init_capa: dict = {}
@@ -103,7 +105,7 @@ class MODEL2(object):
                      'vl': self.mon_to_init_capa[(pred_mon, 'AVANTE')] - self.avg_unavail_capa}
 
         # Make initial values dataframe
-        pred_input = pd.DataFrame({'season': season, 'lead_time': self.lt_vec, 'discount': init_disc})
+        pred_input = self._get_pred_input(season=season, init_disc=init_disc, pred_day=pred_day)
 
         pred_result = self._pred_fitted_model(pred_input=pred_input, fitted_model=fitted_model)
 
@@ -120,6 +122,20 @@ class MODEL2(object):
         self._save_result(result=result_df, pred_day=pred_day)
 
         print(f'Prediction result on {pred_day} is saved')
+
+    def _get_pred_input(self, season: int, init_disc: int, pred_day: str):
+        pred_input = {}
+        for type in ['cnt', 'disc', 'util']:
+            input_model = {}
+            for model in ['av', 'k3', 'vl']:
+                if type in ['cnt', 'util']:
+                    input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec, 'discount': init_disc})
+                else:
+                    input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec,
+                                                       'res_cnt': self.day_to_init_res_cnt[pred_day].get(model, 0)})
+            pred_input[type] = input_model
+
+        return pred_input
 
     ####################################
     # 2. Data & Variable Initialization
@@ -252,10 +268,65 @@ class MODEL2(object):
     # 4. Prediction
     ##################################
     def _set_pred_init_variables(self):
+        self.day_to_init_res_cnt = self._get_init_res_cnt()
         self.day_to_season = self._get_seasonal_map()
         self.day_to_init_disc = self._get_init_disc_map()
         self.mon_to_init_capa = self._get_init_capa()
         self.lt, self.lt_vec, self.lt_to_lt_vec = self._get_lead_time()
+
+    def _get_init_res_cnt(self):
+        # Load recent reservation dataset
+        load_path = os.path.join('..', 'input', 'reservation')
+        res_curr = pd.read_csv(os.path.join(load_path, 'res_' + self.curr_res_day + '.csv'), delimiter='\t')
+
+        res_remap_cols = {
+            '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
+            '고객구분': 'cust_kind', '고객구분명': 'cust_kind_nm', '총 청구액(VAT포함)': 'tot_fee',
+            '예약모델': 'res_model', '예약모델명': 'res_model_nm', '차급': 'car_grd',
+            '대여일': 'rent_day', '대여시간': 'rent_time', '반납일': 'return_day', '반납시간': 'return_time',
+            '대여기간(일)': 'rent_period_day', '대여기간(시간)': 'rent_period_time',
+            'CDW요금': 'cdw_fee', '할인유형': 'discount_type', '할인유형명': 'discount_type_nm',
+            '적용할인명': 'applyed_discount', '적용할인율(%)': 'discount_rate', '회원등급': 'member_grd',
+            '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
+        res_curr = res_curr.rename(columns=res_remap_cols)
+
+        res_drop_col = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee',
+                        'res_model', 'car_grd', 'rent_time', 'return_day', 'return_time', 'rent_period_day',
+                        'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm', 'sale_purpose',
+                        'applyed_discount', 'discount_rate', 'member_grd', 'sale_purpose', 'car_kind']
+        res_curr = res_curr.drop(columns=res_drop_col, errors='ignore')
+
+        res_curr['rent_day'] = pd.to_datetime(res_curr['rent_day'], format='%Y-%m-%d')
+        res_curr['res_day'] = pd.to_datetime(res_curr['res_day'], format='%Y-%m-%d')
+
+        # filter only 1.6 grade car group
+        res_curr = res_curr[res_curr['res_model_nm'].isin([
+            'K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)',
+            '아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
+            '더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)'
+        ])]
+
+        # Car Model group
+        # SOUL 모델은 VELOSTER 모델에 포함해서 분석 (실적 데이터가 적음)
+        conditions = [
+            res_curr['res_model_nm'].isin(['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']),
+            res_curr['res_model_nm'].isin(['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']),
+            res_curr['res_model_nm'].isin(['더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)'])]
+        values = ['k3', 'av', 'vl']
+        res_curr['res_model_grp'] = np.select(conditions, values)
+
+        res_curr = res_curr.drop(columns=['res_model_nm'], errors='ignore')
+        res_curr = res_curr.sort_values(by=['rent_day', 'res_day'])
+
+        res_cnt = res_curr.groupby(by=['rent_day', 'res_model_grp']).count()['res_num']
+        res_cnt = res_cnt.reset_index(level=(0, 1))
+
+        res_curr_dict = defaultdict(dict)
+        for day, model, cnt in zip(res_cnt['rent_day'], res_cnt['res_model_grp'], res_cnt['res_num']):
+            day_str = day.strftime('%Y-%m-%d')
+            res_curr_dict[day_str].update({model: cnt})
+
+        return res_curr_dict
 
     @staticmethod
     def _get_seasonal_map():
@@ -330,7 +401,7 @@ class MODEL2(object):
         for type_key, type_val in fitted_model.items():
             pred_models = {}
             for model_key, model_val in type_val.items():
-                pred = model_val.predict(pred_input)
+                pred = model_val.predict(pred_input[type_key][model_key])
                 if (type_key == 'cnt') or (type_key == 'disc'):
                     pred = np.round(pred, 1)
                 else:
@@ -352,11 +423,11 @@ class MODEL2(object):
         return lt_to_pred_result
 
     def _map_rslt_to_lead_time(self, pred_final: dict):
-        result = defaultdict(list)
+        result = defaultdict(dict)
         for type_key, type_val in pred_final.items():   # type_key: cnt / disc / util
             for model_key, model_val in type_val.items():   # model_key: av / k3 / vl
                 rslt = [model_val[self.lt_to_lt_vec[i]] for i in self.lt]
-                result[model_key].append({type_key: rslt})
+                result[model_key].update({type_key: rslt})
 
         return result
 
@@ -369,9 +440,7 @@ class MODEL2(object):
         model_df = {}
         for model_key, model_val in result.items():
             df = pd.DataFrame({'date': date, 'lead_time': lead_time, 'curr_disc': curr_disc})
-            for type in model_val:
-                type_key = list(type.keys())[0]
-                type_val = list(type.values())[0]
+            for type_key, type_val in model_val.items():
                 df['exp_' + type_key] = type_val
 
             # Calculate utilization count
