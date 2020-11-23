@@ -3,7 +3,8 @@ from DataPreprocessing import DataPrep
 
 # Model
 from Model1 import MODEL1
-from Model2 import MODEL2
+# from Model2 import MODEL2
+from Model2New import MODEL2NEW
 from Model3 import MODEL3
 
 import os
@@ -26,7 +27,9 @@ def model_1(jeju_visitor: pd.DataFrame, start_date: int, end_date: int,
 
 # Model 2
 def model_2(pred_days: list, curr_res_day: str):
-    model_2 = MODEL2(curr_res_day=curr_res_day)
+    # model_2 = MODEL2(curr_res_day=curr_res_day)
+    model_2 = MODEL2NEW(curr_res_day=curr_res_day)
+
     # Train
     # model_2.train()
     # Prediction
@@ -40,8 +43,8 @@ def model_3(pred_days: list, apply_day: str, curr_res_day: str):
 # Moin
 ##################
 # Data Preprocessing
-# data_prep = DataPrep()
-# data_prep.prep_res_hx()
+data_prep = DataPrep()
+data_prep.prep_res_hx()
 
 # Model 1
 jeju_visitors = pd.read_csv(os.path.join('..', 'input', 'jeju_visit_daily.csv'), delimiter='\t')
@@ -71,8 +74,9 @@ curr_res_day = '201118'
 
 pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
 pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
-model_2(pred_days=pred_days, curr_res_day=curr_res_day)
+# model_2(pred_days=pred_days, curr_res_day=curr_res_day)
+# model_2(pred_days=pred_days, curr_res_day=curr_res_day)
 
 # Model 3
-apply_day = '2020/11/23'
-model_3(pred_days=pred_days, apply_day=apply_day, curr_res_day=curr_res_day)
+# apply_day = '2020/11/23'
+# model_3(pred_days=pred_days, apply_day=apply_day, curr_res_day=curr_res_day)
