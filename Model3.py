@@ -49,7 +49,7 @@ class MODEL3(object):
             rec_output_renamed = self._rename_col_kor(rec_output=rec_output_rearranged)
 
             # Save result on each day
-            self._save_result(pred_day=pred_day, rec_output=rec_output_renamed)
+            # self._save_result(pred_day=pred_day, rec_output=rec_output_renamed)
 
             fst_rec_data = self._get_fst_rec_data(rec_output=rec_output_renamed, pred_day=pred_day)
 

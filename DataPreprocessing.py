@@ -25,6 +25,7 @@ class DataPrep(object):
         # Make reservation history dataset
         # self._make_res_hx()
 
+        # Load and set data
         self._set_data()
 
         # Change data types
@@ -33,7 +34,8 @@ class DataPrep(object):
         self.res_hx['discount'] = self.res_hx['discount'].astype(int)
 
         # Data preprocessing: by car
-        # self._prep_by_group(res_hx=self.res_hx, group='car')
+        self._prep_by_group(res_hx=self.res_hx, group='car')
+
         # Data preprocessing: by model
         self._prep_by_group(res_hx=self.res_hx, group='model')
 
@@ -238,8 +240,8 @@ class DataPrep(object):
         disc_util_cum['util_rate_cum'] = disc_util_cum['util_cum'] / disc_util_cum['capa']
 
         # Drop unnecessary columns
-        disc_util_inc = disc_util_inc.drop(columns=['month', 'capa', 'util_add'])
-        disc_util_cum = disc_util_cum.drop(columns=['month', 'capa', 'util_cum'])
+        disc_util_inc = disc_util_inc.drop(columns=['month', 'capa'])
+        disc_util_cum = disc_util_cum.drop(columns=['month', 'capa'])
 
         return disc_util_inc, disc_util_cum
 
@@ -335,6 +337,8 @@ class DataPrep(object):
         res_hx['lead_time_vec'] = (res_hx['lead_time'] // 7) + 24       # Lead time > 28 : 1 week
         res_hx['lead_time_vec'] = np.where(res_hx['lead_time_vec'] < 28,    # Lead time 1 ~ 27
                                            res_hx['lead_time'].values,
+                                           res_hx['lead_time_vec'].values)
+        res_hx['lead_time_vec'] = np.where(res_hx['lead_time_vec'] > 36, 36,   # Lead time > 36
                                            res_hx['lead_time_vec'].values)
 
         # Change data type
