@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 
 from sklearn.ensemble import ExtraTreesRegressor
 
+
 class MODEL2NEW(object):
 
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
@@ -116,7 +117,7 @@ class MODEL2NEW(object):
 
         # Result data convert to dataframe
         result_df = self._conv_to_dataframe(result=result, pred_datetime=pred_datetime,
-                                        init_disc=init_disc, init_capa=init_capa)
+                                            init_disc=init_disc, init_capa=init_capa)
 
         # Save the result dataframe
         self._save_result(result=result_df, pred_day=pred_day)
@@ -125,18 +126,15 @@ class MODEL2NEW(object):
 
     def _get_pred_input(self, season: int, init_disc: int, pred_day: str):
         pred_input = {}
-        for type in ['cnt', 'disc', 'util']:
+        for data_type in ['cnt', 'disc', 'util']:
             input_model = {}
             for model in ['av', 'k3', 'vl']:
-                if type in ['cnt', 'util']:
-                    # input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec, 'discount': init_disc})
+                if data_type in ['cnt', 'util']:
                     input_model[model] = np.array([season, self.lt_vec[0], init_disc])
                 else:
-                    # input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec,
-                    #                                    'res_cnt': self.day_to_init_res_cnt[pred_day].get(model, 0)})
                     input_model[model] = np.array([season, self.lt_vec[0],
                                                    self.day_to_init_res_cnt[pred_day].get(model, 0)])
-            pred_input[type] = input_model
+            pred_input[data_type] = input_model
 
         return pred_input
 
@@ -379,7 +377,8 @@ class MODEL2NEW(object):
         for data_type in ['cnt', 'disc', 'util']:
             model_bests = {}
             for model in ['av', 'k3', 'vl']:
-                f = open(os.path.join(self.load_model_path, data_type + '_' + model + '_' + regr + '_params.pickle'), 'rb')
+                f = open(os.path.join(self.load_model_path, data_type + '_' + model + '_' + regr +
+                                      '_params.pickle'), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
             regr_bests[data_type] = model_bests
@@ -399,7 +398,8 @@ class MODEL2NEW(object):
 
         return fitted
 
-    def _pred_fitted_model(self, pred_input: pd.DataFrame, fitted_model: dict):
+    @staticmethod
+    def _pred_fitted_model(pred_input: dict, fitted_model: dict):
         pred_results = {}
         for type_key, type_val in fitted_model.items():    # type_key: cnt / disc / util
             pred_models = {}
@@ -452,8 +452,9 @@ class MODEL2NEW(object):
 
         return model_df
 
-    def _save_result(self, result: dict, pred_day: str):
+    @staticmethod
+    def _save_result(result: dict, pred_day: str):
         save_path = os.path.join('..', 'result', 'data', 'prediction')
         for model_key, model_val in result.items():
-            model_val.to_csv(os.path.join(save_path, 'original', model_key,
-                                          'm2_pred(' + pred_day + ').csv'), index=False)
+            model_val.to_csv(os.path.join(save_path, 'original', model_key, 'm2_pred(' + pred_day + ').csv'),
+                             index=False)
