@@ -15,9 +15,9 @@ class MODEL2(object):
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
-    def __init__(self, curr_res_day: str):
-        self.load_path = os.path.join('..', 'result', 'data', 'model_2')
-        self.load_model_path = os.path.join('..', 'result', 'model', 'model_2')
+    def __init__(self, res_update_day: str):
+        self.load_path_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'model')
+        self.load_path_model = os.path.join('..', 'result', 'model', 'model_2')
         self.save_path = os.path.join('..', 'result', 'model', 'model_2')
         self.random_state = 2020
         self.test_size = 0.2
@@ -26,26 +26,28 @@ class MODEL2(object):
         self.res_cnt_av: pd.DataFrame = pd.DataFrame()
         self.res_cnt_k3: pd.DataFrame = pd.DataFrame()
         self.res_cnt_vl: pd.DataFrame = pd.DataFrame()
+
         # Load reservation utilization dataset
         self.res_util_av: pd.DataFrame = pd.DataFrame()
         self.res_util_k3: pd.DataFrame = pd.DataFrame()
         self.res_util_vl: pd.DataFrame = pd.DataFrame()
+
         # inintialize mapping dictionary
         self.data_map: dict = dict()
         self.split_map: dict = dict()
         self.param_grids = dict()
 
-        #
+        # Load dataset
         self._load_data()
         self.data_map, self.split_map = self._set_split_map()
 
         # Prediction variables
         # Initial values of variables
-        self.curr_res_day = curr_res_day
-        self.day_to_init_res_cnt: dict = {}
+        self.res_update_day = res_update_day
+        self.day_to_res_cnt_init: dict = {}
         self.day_to_season: dict = {}
-        self.day_to_init_disc: dict = {}
-        self.mon_to_init_capa: dict = {}
+        self.day_to_disc_init: dict = {}
+        self.mon_to_capa_init: dict = {}
         self.avg_unavail_capa = 2
         # Lead time
         self.lt: np.array = []
@@ -96,13 +98,13 @@ class MODEL2(object):
         # Get season value and initial discount rate
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
         season = self.day_to_season[pred_datetime]
-        init_disc = self.day_to_init_disc[pred_datetime]
+        init_disc = self.day_to_disc_init[pred_datetime]
 
         # Set initial capacity of model
         pred_mon = pred_day.split('-')[0] + pred_day.split('-')[1]
-        init_capa = {'av': self.mon_to_init_capa[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
-                     'k3': self.mon_to_init_capa[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
-                     'vl': self.mon_to_init_capa[(pred_mon, 'AVANTE')] - self.avg_unavail_capa}
+        init_capa = {'av': self.mon_to_capa_init[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
+                     'k3': self.mon_to_capa_init[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
+                     'vl': self.mon_to_capa_init[(pred_mon, 'AVANTE')] - self.avg_unavail_capa}
 
         # Make initial values dataframe
         pred_input = self._get_pred_input(season=season, init_disc=init_disc, pred_day=pred_day)
@@ -132,7 +134,7 @@ class MODEL2(object):
                     input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec, 'discount': init_disc})
                 else:
                     input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec,
-                                                       'res_cnt': self.day_to_init_res_cnt[pred_day].get(model, 0)})
+                                                       'res_cnt': self.day_to_res_cnt_init[pred_day].get(model, 0)})
             pred_input[type] = input_model
 
         return pred_input
@@ -142,13 +144,13 @@ class MODEL2(object):
     ####################################
     def _load_data(self):
         # Load Reservation Count dataset
-        self.res_cnt_av = pd.read_csv(os.path.join(self.load_path, 'model', 'disc_res_cum_av.csv'))
-        self.res_cnt_k3 = pd.read_csv(os.path.join(self.load_path, 'model', 'disc_res_cum_k3.csv'))
-        self.res_cnt_vl = pd.read_csv(os.path.join(self.load_path, 'model', 'disc_res_cum_vl.csv'))
+        self.res_cnt_av = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_cum_av.csv'))
+        self.res_cnt_k3 = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_cum_k3.csv'))
+        self.res_cnt_vl = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_cum_vl.csv'))
         # Load Reservation Utilization dataset
-        self.res_util_av = pd.read_csv(os.path.join(self.load_path, 'model', 'disc_util_cum_av.csv'))
-        self.res_util_k3 = pd.read_csv(os.path.join(self.load_path, 'model', 'disc_util_cum_k3.csv'))
-        self.res_util_vl = pd.read_csv(os.path.join(self.load_path, 'model', 'disc_util_cum_vl.csv'))
+        self.res_util_av = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_cum_av.csv'))
+        self.res_util_k3 = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_cum_k3.csv'))
+        self.res_util_vl = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_cum_vl.csv'))
 
     def _set_split_map(self):
         data_map = {'cnt': {'av': self.res_cnt_av,
@@ -166,7 +168,7 @@ class MODEL2(object):
                      'disc': {'drop': ['disc_mean'],
                               'target': 'disc_mean'},
                      'util': {
-                         'drop': ['lead_time', 'util_cum', 'util_rate_cum'],
+                         'drop': ['util_cum', 'util_rate_cum'],
                          'target': 'util_rate_cum'}}
 
         return data_map, split_map
@@ -268,16 +270,16 @@ class MODEL2(object):
     # 4. Prediction
     ##################################
     def _set_pred_init_variables(self):
-        self.day_to_init_res_cnt = self._get_init_res_cnt()
+        self.day_to_res_cnt_init = self._get_init_res_cnt()
         self.day_to_season = self._get_seasonal_map()
-        self.day_to_init_disc = self._get_init_disc_map()
-        self.mon_to_init_capa = self._get_init_capa()
+        self.day_to_disc_init = self._get_init_disc_map()
+        self.mon_to_capa_init = self._get_init_capa()
         self.lt, self.lt_vec, self.lt_to_lt_vec = self._get_lead_time()
 
     def _get_init_res_cnt(self):
         # Load recent reservation dataset
         load_path = os.path.join('..', 'input', 'reservation')
-        res_curr = pd.read_csv(os.path.join(load_path, 'res_' + self.curr_res_day + '.csv'), delimiter='\t')
+        res_curr = pd.read_csv(os.path.join(load_path, 'res_' + self.res_update_day + '.csv'), delimiter='\t')
 
         res_remap_cols = {
             '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
@@ -353,13 +355,13 @@ class MODEL2(object):
     def _get_init_capa():
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
-        init_capa = pd.read_csv(os.path.join(load_path, 'capa_curr.csv'), delimiter='\t',
+        capa_init = pd.read_csv(os.path.join(load_path, 'capa_curr_model.csv'), delimiter='\t',
                                 dtype={'date': str, 'model': str, 'capa': int})
-        day_to_init_capa = {(date, model): capa for date, model, capa in zip(init_capa['date'],
-                                                                             init_capa['model'],
-                                                                             init_capa['capa'])}
+        day_to_capa_init = {(date, model): capa for date, model, capa in zip(capa_init['date'],
+                                                                             capa_init['model'],
+                                                                             capa_init['capa'])}
 
-        return day_to_init_capa
+        return day_to_capa_init
 
     @staticmethod
     def _get_lead_time():
@@ -376,7 +378,7 @@ class MODEL2(object):
         for data_type in ['cnt', 'disc', 'util']:
             model_bests = {}
             for model in ['av', 'k3', 'vl']:
-                f = open(os.path.join(self.load_model_path, data_type + '_' + model + '_' + regr + '_params.pickle'), 'rb')
+                f = open(os.path.join(self.load_path_model, data_type + '_' + model + '_' + regr + '_params.pickle'), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
             regr_bests[data_type] = model_bests
