@@ -44,6 +44,8 @@ class DataPrep(object):
         # Data preprocessing: by model
         self._prep_by_group(df=res_hx, group='model', time='hx')
 
+        print("Data preprocessing of history reservation is finished.")
+
     def prep_res_recent(self, update_day: str):
         # Load ad set recent reservation dataset
         res_re = self._load_recent_dataset(update_day=update_day)
@@ -69,6 +71,8 @@ class DataPrep(object):
         self._prep_by_group(df=res_re, group='car', time='re')
         # Data preprocessing: by model
         self._prep_by_group(df=res_re, group='model', time='re')
+
+        print("Data preprocessing of recent reservation is finished.")
 
     def _drop_col_res_recent(self, df: pd.DataFrame):
         drop_cols = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee', 'res_model', 'car_grd',
