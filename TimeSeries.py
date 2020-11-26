@@ -15,7 +15,7 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 
-class MODEL1(object):
+class TimeSeries(object):
     """
     Jeju visitors prediction model (Time series model)
     """

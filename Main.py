@@ -2,10 +2,9 @@
 from DataPreprocessing import DataPrep
 
 # Model
-from Model1 import MODEL1
-from Model2 import MODEL2
-from Model2Detail import MODEL2DETAIL
-from Model3 import MODEL3
+from TimeSeries import TimeSeries           # Model 1
+from ResPredict import ResPredict           # Model 2
+from DiscRecommend import DiscRecommend     # Model 3
 
 import os
 import warnings
@@ -15,12 +14,12 @@ import numpy as np
 import pandas as pd
 
 
-def data_preprocessing():
+def data_preprocessing(update_day: str):
     data_prep = DataPrep()
     # History dataset
-    data_prep.prep_res_hx()
+    # data_prep.prep_res_hx()
     # Recent  dataset
-    data_prep.prep_res_recent(update_day='201118')
+    data_prep.prep_res_recent(update_day=update_day)
 
 
 # Model 1 : Jeju visitor prediction
@@ -37,7 +36,7 @@ def model_1(start_date: int, end_date: int,
             'trend': ['add', 'additive'],
             'damped_trend': [True, False]}}
 
-    model_1 = MODEL1(visitor=jeju_visitors, start_date=start_date, end_date=end_date)
+    model_1 = TimeSeries(visitor=jeju_visitors, start_date=start_date, end_date=end_date)
 
     # Train
     model_1.train(n_test=n_test, test_models=test_models, param_grids=param_grids)
@@ -50,7 +49,7 @@ def model_2(start_date: str, end_date: str, res_update_day: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
-    model_2 = MODEL2(res_update_day=res_update_day)
+    model_2 = ResPredict(res_update_day=res_update_day)
 
     # Train
     # model_2.train()
@@ -63,14 +62,15 @@ def model_3(start_date: str, end_date: str, apply_day: str, res_update_day: str)
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
-    model_3 = MODEL3(res_update_day=res_update_day)
+    model_3 = DiscRecommend(res_update_day=res_update_day)
     model_3.rec(pred_days=pred_days, apply_day=apply_day)
 
 ##################################################################
 # Moin
 ##################################################################
 # Data Preprocessing
-# data_preprocessing()
+res_update_day = '201126'
+# data_preprocessing(update_day=res_update_day)
 
 # Model 1
 # Define hyper-parameters
@@ -79,13 +79,12 @@ m1_end_date = 20201031
 n_test = 28  # 4 weeks
 
 # Run model 1
-# model_1(start_date=m1_start_date, end_date=m1_end_date, n_test=n_test,)
+model_1(start_date=m1_start_date, end_date=m1_end_date, n_test=n_test,)
 
 # Model 2
 # Prediction days
-start_date = '2020/12/14'    # 2020/12/01
+start_date = '2020/12/01'    # 2020/12/01
 end_date = '2021/02/28'
-res_update_day = '201118'
 
 # Run model 2
 # model_2(start_date=start_date, end_date=end_date, res_update_day=res_update_day)

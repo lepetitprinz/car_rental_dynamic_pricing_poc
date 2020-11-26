@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 
 from sklearn.ensemble import ExtraTreesRegressor
 
-class MODEL2(object):
+class ResPredict(object):
 
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
