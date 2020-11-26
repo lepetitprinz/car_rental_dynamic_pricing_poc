@@ -6,13 +6,16 @@ from TimeSeries import TimeSeries           # Model 1
 from ResPredict import ResPredict           # Model 2
 from DiscRecommend import DiscRecommend     # Model 3
 
+# Lead Time Model
+from ResPredLeadTime import ResPredLeadTime
+from DiscRecLeadTime import DiscRecLeadTime
+
 import os
 import warnings
 warnings.filterwarnings('ignore')
 
 import numpy as np
 import pandas as pd
-
 
 def data_preprocessing(update_day: str):
     data_prep = DataPrep()
@@ -21,6 +24,9 @@ def data_preprocessing(update_day: str):
     # Recent  dataset
     data_prep.prep_res_recent(update_day=update_day)
 
+    print('')
+    print("Data preprocessing is finished.")
+    print('')
 
 # Model 1 : Jeju visitor prediction
 def model_1(start_date: int, end_date: int,
@@ -43,7 +49,6 @@ def model_1(start_date: int, end_date: int,
     # Prediction
     model_1.predict(pred_step=88 + 31)    # 12 weeks + 1 month
 
-
 # Model 2
 def model_2(start_date: str, end_date: str, res_update_day: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
@@ -57,13 +62,25 @@ def model_2(start_date: str, end_date: str, res_update_day: str):
     # Prediction
     model_2.predict(pred_days=pred_days)
 
-
 def model_3(start_date: str, end_date: str, apply_day: str, res_update_day: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
     model_3 = DiscRecommend(res_update_day=res_update_day)
     model_3.rec(pred_days=pred_days, apply_day=apply_day)
+
+def model_lead_time(start_date: str, end_date: str, apply_day: str, res_update_day: str):
+    pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
+    pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
+
+    # Predict reservation changing trend
+    pred_lead_time = ResPredLeadTime(res_update_day=res_update_day)
+    pred_lead_time.train()
+    # pred_lead_time.predict(pred_days=pred_days)
+
+    # Recommend discount rate
+    disc_rec_lead_time = DiscRecLeadTime(res_update_day=res_update_day)
+    disc_rec_lead_time.rec(pred_days=pred_days, apply_day=apply_day)
 
 ##################################################################
 # Moin
@@ -79,7 +96,7 @@ m1_end_date = 20201031
 n_test = 28  # 4 weeks
 
 # Run model 1
-model_1(start_date=m1_start_date, end_date=m1_end_date, n_test=n_test,)
+# model_1(start_date=m1_start_date, end_date=m1_end_date, n_test=n_test,)
 
 # Model 2
 # Prediction days
@@ -92,3 +109,6 @@ end_date = '2021/02/28'
 # Model 3
 apply_day = '2020/12/01'
 model_3(start_date=start_date, end_date=end_date, apply_day=apply_day, res_update_day=res_update_day)
+
+# Model lead time
+# model_lead_time(start_date=start_date, end_date=end_date, apply_day=apply_day, res_update_day=res_update_day)

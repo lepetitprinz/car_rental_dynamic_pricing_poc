@@ -23,15 +23,21 @@ class DataPrep(object):
 
         self.capa: dict = dict()
         # car grade
-        self.grade_1_6 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)', '아반떼 AD (G)', '아반떼 AD (G) F/L',
+        self.grade_1_6 = ['ALL NEW K3 (G)', '아반떼 AD (G)', '아반떼 AD (G) F/L',
                           '올 뉴 아반떼 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
+        # self.grade_1_6 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)', '아반떼 AD (G)', '아반떼 AD (G) F/L',
+        #                   '올 뉴 아반떼 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
 
     def prep_res_hx(self):
         # Make reservation history dataset
-        self._make_res_hx()
+        # self._make_res_hx()
 
         # Load and set data
         res_hx = self._load_hx_dataset()
+
+        # Filter models
+        res_hx = res_hx[res_hx['res_model_nm'].isin(self.grade_1_6)]
+        res_hx = res_hx.reset_index(drop=True)
 
         # Change data types
         res_hx['rent_day'] = self._to_datetime(res_hx['rent_day'])
@@ -43,8 +49,6 @@ class DataPrep(object):
 
         # Data preprocessing: by model
         self._prep_by_group(df=res_hx, group='model', time='hx')
-
-        print("Data preprocessing of history reservation is finished.")
 
     def prep_res_recent(self, update_day: str):
         # Load ad set recent reservation dataset
@@ -63,6 +67,7 @@ class DataPrep(object):
 
         # Merge dataset
         res_re = pd.merge(res_re, self.season_re, how='left', on='rent_day', left_index=True, right_index=False)
+        res_re['seasonality'] = res_re['seasonality'].fillna(1)
 
         # Drop unnecessary columns
         res_re = self._drop_col_res_recent(df=res_re)
@@ -71,8 +76,6 @@ class DataPrep(object):
         self._prep_by_group(df=res_re, group='car', time='re')
         # Data preprocessing: by model
         self._prep_by_group(df=res_re, group='model', time='re')
-
-        print("Data preprocessing of recent reservation is finished.")
 
     def _drop_col_res_recent(self, df: pd.DataFrame):
         drop_cols = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee', 'res_model', 'car_grd',
@@ -237,7 +240,7 @@ class DataPrep(object):
         if group == 'car':
             groups = ['아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
         elif group == 'model':
-            groups = ['AVANTE', 'K3', 'VELOSTER']
+            groups = ['AVANTE', 'K3', 'VELOSTER', 'SOUL']
         model_grp = {}
         for group in groups:
             if time == 'hx':
@@ -254,12 +257,55 @@ class DataPrep(object):
             model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new', 'ALL NEW K3 (G)': 'k3',
                             '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
         elif group == 'model':
-            model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl'}
+            # model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl'}
+            model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl', 'SOUL': 'su'}
 
         save_path = os.path.join('..', 'result', 'data', 'model_2', time, group)
         for model, data in type_data.items():
             data.to_csv(os.path.join(save_path, type_name + '_' + model_nm_map[model] + '.csv'), index=False)
             print(f'{model} of {type_name} data is saved.')
+
+    @staticmethod
+    def _get_res_util_BAK(df: pd.DataFrame):
+        res_util = []
+        for rent_d, rent_t, return_d, return_t, res_day, discount, model in zip(
+                df['rent_day'], df['rent_time'], df['return_day'], df['return_time'],
+                df['res_day'], df['discount'], df['res_model']):
+
+            day_hour = timedelta(hours=24)
+            date_range = pd.date_range(start=rent_d, end=return_d)  # days of rent periods
+            date_len = len(date_range)
+            fst = list(map(int, rent_t.split(':')))
+            lst = list(map(int, return_t.split(':')))
+            ft = timedelta(hours=fst[0], minutes=fst[1])  # time of rent day
+            lt = timedelta(hours=lst[0] + 2, minutes=lst[1])  # time of return day
+
+            # Classify reservation periods
+            f_util = (day_hour - ft) / day_hour
+            l_util = lt / day_hour
+
+            if date_len > 2:
+                util = np.array(f_util)
+                util = np.append(util, np.ones(date_len - 2))
+                util = np.append(util, l_util)
+
+            elif date_len == 2:
+                util = np.array([f_util, l_util])
+
+            else:
+                util = (lt - ft) / day_hour
+                util = np.array([util])
+
+            res_util.extend(np.array([
+                date_range,
+                [res_day] * date_len,
+                util,
+                [discount] * date_len,
+                [model] * date_len
+            ]).T)
+        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util_rate', 'discount', 'res_model'])
+
+        return res_util_df
 
     @staticmethod
     def _get_res_util(df: pd.DataFrame):
@@ -275,7 +321,7 @@ class DataPrep(object):
             fst = list(map(int, rent_t.split(':')))
             lst = list(map(int, return_t.split(':')))
             ft = timedelta(hours=fst[0], minutes=fst[1])  # time of rent day
-            lt = timedelta(hours=lst[0], minutes=lst[1])  # time of return day
+            lt = timedelta(hours=lst[0]+ 2, minutes=lst[1])  # time of return day
 
             f_util = 1
             l_util = 1
@@ -464,7 +510,8 @@ class DataPrep(object):
     def _cluster_by_group(df: pd.DataFrame, group: str):
         if group == 'car':
             av_ad = ['아반떼 AD (G)', '아반떼 AD (G) F/L']
-            k3 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']
+            # k3 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']
+            k3 = ['ALL NEW K3 (G)']
             soul = ['쏘울 (G)', '쏘울 부스터 (G)']
 
             conditions = [
@@ -479,15 +526,19 @@ class DataPrep(object):
 
         elif group == 'model':
             av = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']
-            k3 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']
-            vl = ['더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)']
+            k3 = ['ALL NEW K3 (G)']
+            # k3 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']
+            # vl = ['더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)']
+            vl = ['더 올 뉴 벨로스터 (G)']
+            su = ['쏘울 (G)', '쏘울 부스터 (G)']
 
             conditions = [
                 df['res_model_nm'].isin(av),
                 df['res_model_nm'].isin(k3),
-                df['res_model_nm'].isin(vl)]
+                df['res_model_nm'].isin(vl),
+                df['res_model_nm'].isin(su)]
 
-            values = ['AVANTE', 'K3', 'VELOSTER']
+            values = ['AVANTE', 'K3', 'VELOSTER', 'SOUL']
             df['res_model'] = np.select(conditions, values)
 
         return df
@@ -573,22 +624,6 @@ class DataPrep(object):
 
         return res_hx
 
-    @staticmethod
-    def _group_car_model(res_hx: pd.DataFrame):
-        avante = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']
-        k3 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']
-        veloster_soul = ['더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)']
-
-        conditions = [
-            res_hx['res_model_nm'].isin(avante),
-            res_hx['res_model_nm'].isin(k3),
-            res_hx['res_model_nm'].isin(veloster_soul)]
-
-        values = ['AVANTE', 'K3', 'VELOSTER']
-        res_hx['res_model'] = np.select(conditions, values)
-
-        return res_hx
-
     # Current Reservation dataset
     def _load_data_curr(self, update_date: str):
         file_path_res = os.path.join(self.load_path, 'reservation', 'res_' + update_date + '.csv')
@@ -603,4 +638,3 @@ class DataPrep(object):
         file_path_capa = os.path.join(self.load_path, 'capa', 'capa_curr.csv')
         capa_curr = pd.read_csv(file_path_capa, delimiter='\t',
                                 dtype={'date': str, 'model': str, 'capa': int})
-

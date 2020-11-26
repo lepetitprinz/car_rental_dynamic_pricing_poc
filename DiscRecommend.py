@@ -15,12 +15,13 @@ class DiscRecommend(object):
         self.capa_re: dict = dict()
         self.season: pd.DataFrame = pd.DataFrame()
         self.dmd_pred: pd.DataFrame = pd.DataFrame()
-        self.model_map: dict = dict()
+        self.model_type: list = ['av', 'k3', 'vl', 'su']
+        self.model_map = {'av': 'AVANTE', 'k3': 'K3', 'vl': 'VELOSTER', 'su': 'SOUL'}
 
         # dataset on prediction day
-        self.res_exp: dict = dict()       # key: av / k3 / vl
-        self.res_cnt_re: dict = dict()    # key: av / k3 / vl
-        self.res_util_re: dict = dict()   # key: av / k3 / vl
+        self.res_exp: dict = dict()       # key: av / k3 / vl / su
+        self.res_cnt_re: dict = dict()    # key: av / k3 / vl / su
+        self.res_util_re: dict = dict()   # key: av / k3 / vl / su
 
         # Recommendation Input
         self.rec_input: dict = dict()
@@ -89,37 +90,24 @@ class DiscRecommend(object):
         load_path = os.path.join('..', 'result', 'data', 'model_1')
         self.dmd_pred = pd.read_csv(os.path.join(load_path, 'dmd_pred_2012_2102.csv'))
 
-        self.model_map = {'av': 'AVANTE', 'k3': 'K3', 'vl': 'VELOSTER'}
-
     def _load_data(self, pred_day: str):
-        load_path = os.path.join('..', 'result', 'data', 'prediction', 'original')
+        load_path = os.path.join('..', 'result', 'data', 'prediction')
         self.res_exp = {'av': pd.read_csv(os.path.join(load_path, 'av', 'm2_pred(' + pred_day + ').csv')),
                         'k3': pd.read_csv(os.path.join(load_path, 'k3', 'm2_pred(' + pred_day + ').csv')),
-                        'vl': pd.read_csv(os.path.join(load_path, 'vl', 'm2_pred(' + pred_day + ').csv'))}
+                        'vl': pd.read_csv(os.path.join(load_path, 'vl', 'm2_pred(' + pred_day + ').csv')),
+                        'su': pd.read_csv(os.path.join(load_path, 'su', 'm2_pred(' + pred_day + ').csv'))}
 
         # Current reservation dataset
         load_path = os.path.join('..', 'result', 'data', 'model_2', 're', 'model')
         res_re = defaultdict(dict)
         for data_type in ['res', 'util']:
-            for model in ['av', 'k3', 'vl']:
+            for model in self.model_type:
                 df = pd.read_csv(os.path.join(load_path, 'disc_' + data_type + '_cum_' + model + '.csv'))
                 df = df[df['rent_day'] == pred_day]
                 res_re[data_type].update({model: df})
 
         self.res_cnt_re = res_re['res']
         self.res_util_re = res_re['util']
-
-        # load_path = os.path.join('..', 'result', 'data', 'reservation')
-        # res_cnt = pd.read_csv(os.path.join(load_path, 'res_curr_cnt(' + self.res_update_day + ').csv'))
-        # res_util = pd.read_csv(os.path.join(load_path, 'res_curr_util(' + self.res_update_day + ').csv'))
-        # self.res_cnt_re = self._split_by_model(df=res_cnt[res_cnt['rent_day'] == pred_day])
-        # self.res_util_re = self._split_by_model(df=res_util[res_util['rent_day'] == pred_day])
-
-    # def _split_by_model(self, df: pd.DataFrame):
-    #     return {
-    #         'av': df[df['model'] == 'AVANTE'],
-    #         'k3': df[df['model'] == 'K3'],
-    #         'vl': df[df['model'] == 'VELOSTER']}
 
     def _drop_column(self):
         # Drop columns
@@ -256,7 +244,8 @@ class DiscRecommend(object):
         return rec_output
 
     def _get_rec(self, x):
-        return self._rec_disc_function(curr=x[0], exp=x[1], dmd=self.exp_dmd_change)
+        return self._rec_disc_function(curr=x[0], exp=x[1], dmd=0)
+        # return self._rec_disc_function(curr=x[0], exp=x[1], dmd=self.exp_dmd_change)
 
     @staticmethod
     def _fill_na(input_dict: dict):
@@ -305,7 +294,9 @@ class DiscRecommend(object):
         """
 
         # Hyperparamters (need to tune)
-        theta1 = 1  # ratio of increasing / decreasing magnitude : discount
+        theta1 = 1          # Ratio of Decreasing magnitude
+        if curr < exp:      # Ratio of increasing
+            theta1 = 0.5
         theta2 = 0.05  # ratio of increasing / decreasing magnitude : demand
         phi_low = 1.7  # 1 < phi_low < phi_high < 2
         phi_high = 1.2  # 1 < phi_low < phi_high < 2
