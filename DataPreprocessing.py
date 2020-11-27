@@ -211,10 +211,10 @@ class DataPrep(object):
         disc_util_cum_grp = self._div_into_group(df=disc_util_cum, group=group, time=time)
 
         # Save each car model
-        self._save_model(type_data=disc_res_inc_grp, type_name='disc_res_inc', group=group, time=time)
-        self._save_model(type_data=disc_res_cum_grp, type_name='disc_res_cum', group=group, time=time)
-        self._save_model(type_data=disc_util_inc_grp, type_name='disc_util_inc', group=group, time=time)
-        self._save_model(type_data=disc_util_cum_grp, type_name='disc_util_cum', group=group, time=time)
+        self._save_model(type_data=disc_res_inc_grp, type_name='cnt_inc', group=group, time=time)
+        self._save_model(type_data=disc_res_cum_grp, type_name='cnt_cum', group=group, time=time)
+        self._save_model(type_data=disc_util_inc_grp, type_name='util_inc', group=group, time=time)
+        self._save_model(type_data=disc_util_cum_grp, type_name='util_cum', group=group, time=time)
 
     def _add_lead_time(self, df: pd.DataFrame):
         df['lead_time'] = df['rent_day'] - df['res_day']
@@ -262,7 +262,7 @@ class DataPrep(object):
 
         save_path = os.path.join('..', 'result', 'data', 'model_2', time, group)
         for model, data in type_data.items():
-            data.to_csv(os.path.join(save_path, type_name + '_' + model_nm_map[model] + '.csv'), index=False)
+            data.to_csv(os.path.join(save_path, type_name, type_name + '_' + model_nm_map[model] + '.csv'), index=False)
             print(f'{model} of {type_name} data is saved.')
 
     @staticmethod

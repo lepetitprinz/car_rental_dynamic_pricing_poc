@@ -21,7 +21,7 @@ class TimeSeries(object):
     """
 
     def __init__(self, visitor: pd.DataFrame, start_date: int, end_date: int):
-        self.save_path = os.path.join('..', 'result', 'model', 'model_1')
+        self.save_path = os.path.join('..', 'result', 'model', 'time_series')
         self.visitor = visitor
         self.start_date = start_date
         self.end_date = end_date

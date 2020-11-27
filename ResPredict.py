@@ -16,35 +16,26 @@ class ResPredict(object):
                   "extr": ExtraTreesRegressor}
 
     def __init__(self, res_update_day: str):
-        self.load_path_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'model')
-        self.load_path_model = os.path.join('..', 'result', 'model', 'model_2')
-        self.save_path = os.path.join('..', 'result', 'model', 'model_2')
         self.random_state = 2020
         self.test_size = 0.2
-
         self.data_type: list = ['cnt', 'disc', 'util']
         self.model_type: list = ['av', 'k3', 'vl', 'su']
 
-        # Load reservation count dataset
+        # Path of data & model
+        self.path_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'model')
+        self.path_model = os.path.join('..', 'result', 'model', 'model_2')
+
+        # Reservation count dataset
         self.res_cnt_av: pd.DataFrame = pd.DataFrame()
         self.res_cnt_k3: pd.DataFrame = pd.DataFrame()
         self.res_cnt_vl: pd.DataFrame = pd.DataFrame()
         self.res_cnt_su: pd.DataFrame = pd.DataFrame()
 
-        # Load reservation utilization dataset
+        # Reservation utilization dataset
         self.res_util_av: pd.DataFrame = pd.DataFrame()
         self.res_util_k3: pd.DataFrame = pd.DataFrame()
         self.res_util_vl: pd.DataFrame = pd.DataFrame()
         self.res_util_su: pd.DataFrame = pd.DataFrame()
-
-        # inintialize mapping dictionary
-        self.data_map: dict = dict()
-        self.split_map: dict = dict()
-        self.param_grids = dict()
-
-        # Load dataset
-        self._load_data()
-        self.data_map, self.split_map = self._set_split_map()
 
         # Prediction variables
         # Initial values of variables
@@ -54,12 +45,24 @@ class ResPredict(object):
         self.day_to_disc_init: dict = {}
         self.mon_to_capa_init: dict = {}
         self.avg_unavail_capa = 2
+
         # Lead time
         self.lt: np.array = []
         self.lt_vec: np.array = []
         self.lt_to_lt_vec: dict = {}
 
+        # inintialize mapping dictionary
+        self.data_map: dict = dict()
+        self.split_map: dict = dict()
+        self.param_grids = dict()
+
     def train(self):
+        # Load dataset
+        self._load_data()
+
+        # Define input and output
+        self.data_map, self.split_map = self._set_split_map()
+
         # Split into input and output
         m2_io = self._split_input_target_all()
 
@@ -82,6 +85,12 @@ class ResPredict(object):
         print('Training finished')
 
     def predict(self, pred_days: list):
+        # Load dataset
+        self._load_data()
+
+        # Define input and output
+        self.data_map, self.split_map = self._set_split_map()
+
         # Split into input and output
         m2_io = self._split_input_target_all()
 
@@ -154,15 +163,16 @@ class ResPredict(object):
     ####################################
     def _load_data(self):
         # Load Reservation Count dataset
-        self.res_cnt_av = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_cum_av.csv'))
-        self.res_cnt_k3 = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_cum_k3.csv'))
-        self.res_cnt_vl = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_cum_vl.csv'))
-        self.res_cnt_su = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_cum_su.csv'))
+        self.res_cnt_av = pd.read_csv(os.path.join(self.path_data, 'cnt_cum', 'cnt_cum_av.csv'))
+        self.res_cnt_k3 = pd.read_csv(os.path.join(self.path_data, 'cnt_cum', 'cnt_cum_k3.csv'))
+        self.res_cnt_vl = pd.read_csv(os.path.join(self.path_data, 'cnt_cum', 'cnt_cum_vl.csv'))
+        self.res_cnt_su = pd.read_csv(os.path.join(self.path_data, 'cnt_cum', 'cnt_cum_su.csv'))
+
         # Load Reservation Utilization dataset
-        self.res_util_av = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_cum_av.csv'))
-        self.res_util_k3 = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_cum_k3.csv'))
-        self.res_util_vl = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_cum_vl.csv'))
-        self.res_util_su = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_cum_su.csv'))
+        self.res_util_av = pd.read_csv(os.path.join(self.path_data, 'util_cum', 'util_cum_av.csv'))
+        self.res_util_k3 = pd.read_csv(os.path.join(self.path_data, 'util_cum', 'util_cum_k3.csv'))
+        self.res_util_vl = pd.read_csv(os.path.join(self.path_data, 'util_cum', 'util_cum_vl.csv'))
+        self.res_util_su = pd.read_csv(os.path.join(self.path_data, 'util_cum', 'util_cum_su.csv'))
 
     def _set_split_map(self):
         data_map = {'cnt': {'av': self.res_cnt_av,
@@ -277,7 +287,7 @@ class ResPredict(object):
         for type_key, type_val in regr_bests.items():
             for model_key, model_val in type_val.items():
                 best_params = model_val.get_params()
-                f = open(os.path.join(self.save_path, type_key + '_' + model_key + '_' + regr + '_params.pickle'), 'wb')
+                f = open(os.path.join(self.path_model, type_key, regr + '_params_' + model_key + '.pickle'), 'wb')
                 pickle.dump(best_params, f)
                 f.close()
 
@@ -395,8 +405,7 @@ class ResPredict(object):
         for data_type in self.data_type:
             model_bests = {}
             for model in self.model_type:
-                f = open(os.path.join(self.load_path_model, data_type + '_' + model + '_' +
-                                      regr + '_params.pickle'), 'rb')
+                f = open(os.path.join(self.path_model, data_type, regr + '_params_' + model + '.pickle'), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
             regr_bests[data_type] = model_bests

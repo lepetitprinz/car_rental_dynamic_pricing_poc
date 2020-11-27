@@ -6,9 +6,8 @@ from TimeSeries import TimeSeries           # Model 1
 from ResPredict import ResPredict           # Model 2
 from DiscRecommend import DiscRecommend     # Model 3
 
-# Lead Time Model
-from ResPredLeadTime import ResPredLeadTime
-from DiscRecLeadTime import DiscRecLeadTime
+# Sales Prediction model
+from SalesPredict import SalesPredict
 
 import os
 import warnings
@@ -20,7 +19,7 @@ import pandas as pd
 def data_preprocessing(update_day: str):
     data_prep = DataPrep()
     # History dataset
-    # data_prep.prep_res_hx()
+    data_prep.prep_res_hx()
     # Recent  dataset
     data_prep.prep_res_recent(update_day=update_day)
 
@@ -62,6 +61,7 @@ def model_2(start_date: str, end_date: str, res_update_day: str):
     # Prediction
     model_2.predict(pred_days=pred_days)
 
+# Model 3
 def model_3(start_date: str, end_date: str, apply_day: str, res_update_day: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
@@ -69,46 +69,44 @@ def model_3(start_date: str, end_date: str, apply_day: str, res_update_day: str)
     model_3 = DiscRecommend(res_update_day=res_update_day)
     model_3.rec(pred_days=pred_days, apply_day=apply_day)
 
-def model_lead_time(start_date: str, end_date: str, apply_day: str, res_update_day: str):
+def model_sales_pred(start_date: str, end_date: str, apply_day: str, res_update_day: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
     # Predict reservation changing trend
-    pred_lead_time = ResPredLeadTime(res_update_day=res_update_day)
-    pred_lead_time.train()
-    # pred_lead_time.predict(pred_days=pred_days)
+    pred_lead_time = SalesPredict(res_update_day=res_update_day)
+    # pred_lead_time.train()
+    pred_lead_time.predict(pred_days=pred_days, apply_day=apply_day)
 
     # Recommend discount rate
-    disc_rec_lead_time = DiscRecLeadTime(res_update_day=res_update_day)
-    disc_rec_lead_time.rec(pred_days=pred_days, apply_day=apply_day)
+    # disc_rec_lead_time = DiscRecLeadTime(res_update_day=res_update_day)
+    # disc_rec_lead_time.rec(pred_days=pred_days, apply_day=apply_day)
 
-##################################################################
+##########################################
 # Moin
-##################################################################
-# Data Preprocessing
+##########################################
+# Hyper-paramters
 res_update_day = '201126'
-# data_preprocessing(update_day=res_update_day)
-
-# Model 1
-# Define hyper-parameters
 m1_start_date = 20191101
 m1_end_date = 20201031
 n_test = 28  # 4 weeks
+# Prediction days
+# start_date = '2020/12/01'
+start_date = '2020/12/10'
+end_date = '2021/02/28'
+apply_day = '2020/12/01'
 
-# Run model 1
+# Data Preprocessing
+# data_preprocessing(update_day=res_update_day)
+
+# Model 1
 # model_1(start_date=m1_start_date, end_date=m1_end_date, n_test=n_test,)
 
 # Model 2
-# Prediction days
-start_date = '2020/12/01'    # 2020/12/01
-end_date = '2021/02/28'
-
-# Run model 2
 # model_2(start_date=start_date, end_date=end_date, res_update_day=res_update_day)
 
 # Model 3
-apply_day = '2020/12/01'
-model_3(start_date=start_date, end_date=end_date, apply_day=apply_day, res_update_day=res_update_day)
+# model_3(start_date=start_date, end_date=end_date, apply_day=apply_day, res_update_day=res_update_day)
 
 # Model lead time
-# model_lead_time(start_date=start_date, end_date=end_date, apply_day=apply_day, res_update_day=res_update_day)
+model_sales_pred(start_date=start_date, end_date=end_date, apply_day=apply_day, res_update_day=res_update_day)

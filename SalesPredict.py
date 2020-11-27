@@ -1,6 +1,8 @@
 import os
+import copy
 import pickle
 import datetime as dt
+from datetime import timedelta
 
 import numpy as np
 import pandas as pd
@@ -10,48 +12,36 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import ExtraTreesRegressor
 
 
-class ResPredLeadTime(object):
+class SalesPredict(object):
 
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
     def __init__(self, res_update_day: str):
-        self.load_path_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
-        self.load_path_model = os.path.join('..', 'result', 'model', 'model_2')
-        self.save_path = os.path.join('..', 'result', 'model', 'model_2')
         self.random_state = 2020
         self.test_size = 0.2
-
-        self.data_type: list = ['cnt', 'util']
+        self.data_type: list = ['cnt_inc', 'cnt_cum', 'util_inc', 'util_cum', 'disc']
         self.model_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
+        self.model_type_map: dict = {'av_ad': '아반떼 AD (G) F/L', 'av_new': '올 뉴 아반떼 (G)',
+                                     'k3': 'ALL NEW K3 (G)', 'soul': '쏘울 부스터 (G)',
+                                     'vlst': '더 올 뉴 벨로스터 (G)'}
 
-        # Load increasing count of reservation dataset
-        self.cnt_inc_av_ad: pd.DataFrame = pd.DataFrame()   # Avante AD F/L
-        self.cnt_inc_av_new: pd.DataFrame = pd.DataFrame()  # All New Avante
-        self.cnt_inc_k3: pd.DataFrame = pd.DataFrame()      # All New K3
-        self.cnt_inc_soul: pd.DataFrame = pd.DataFrame()    # Soul Booster
-        self.cnt_inc_vlst: pd.DataFrame = pd.DataFrame()    # The All New Veloster
+        # Path of data & model
+        self.path_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
+        self.path_model = os.path.join('..', 'result', 'model', 'res_pred_lead_time')
 
-        # Load reservation utilization dataset
-        self.util_inc_av_ad: pd.DataFrame = pd.DataFrame()   # Avante AD F/L
-        self.util_inc_av_new: pd.DataFrame = pd.DataFrame()  # All New Avante
-        self.util_inc_k3: pd.DataFrame = pd.DataFrame()      # All New K3
-        self.util_inc_soul: pd.DataFrame = pd.DataFrame()    # Soul Booster
-        self.util_inc_vlst: pd.DataFrame = pd.DataFrame()    # The All New Veloster
+        self.res_data_hx: dict = {}
 
         # inintialize mapping dictionary
         self.data_map: dict = dict()
         self.split_map: dict = dict()
         self.param_grids = dict()
 
-        # Load dataset
-        self._load_data()
-        self.data_map, self.split_map = self._set_split_map()
-
         # Prediction variables
         # Initial values of variables
         self.res_update_day = res_update_day
-        self.day_to_res_cnt_init: dict = {}
+        self.day_to_init_res_cnt: dict = {}
+        self.day_to_init_res_util: dict = {}
         self.day_to_season: dict = {}
         self.day_to_disc_init: dict = {}
         self.mon_to_capa_init: dict = {}
@@ -62,6 +52,12 @@ class ResPredLeadTime(object):
         self.lt_to_lt_vec: dict = {}
 
     def train(self):
+        # Load dataset
+        res_hx = self._load_data_hx()
+
+        # Define input and output
+        self._set_split_map(data=res_hx)
+
         # Split into input and output
         m2_io = self._split_input_target_all()
 
@@ -83,12 +79,21 @@ class ResPredLeadTime(object):
 
         print('Training finished')
 
-    def predict(self, pred_days: list):
-        # Split into input and output
-        m2_io = self._split_input_target_all()
-
+    def predict(self, pred_days: list, apply_day: str):
         # Set initial variables
         self._set_pred_init_variables()
+
+        # Set recent data mapping
+        self.day_to_init_res_cnt, self.day_to_init_res_util = self._get_init_res_cnt()
+
+        # Load history dataset
+        res_hx = self._load_data_hx()
+
+        # Define input and output
+        self._set_split_map(data=res_hx)
+
+        # Split into input and output
+        m2_io = self._split_input_target_all()
 
         # Load best hyper-parameters
         extr_bests = self._load_best_params(regr='extr')
@@ -96,31 +101,40 @@ class ResPredLeadTime(object):
         # fit the model
         fitted = self._fit_model(dataset=m2_io, regr='extr', params=extr_bests)
 
+        # Change dictionary structure
+        fitted = self._chg_dict_structure(fitted=fitted)
+
         for pred_day in pred_days:
-            self._pred(pred_day=pred_day, fitted_model=fitted)
+            self._pred(pred_day=pred_day, apply_day=apply_day, fitted_model=fitted)
 
         print("Model 2 Prediction is finished")
 
-    def _pred(self, pred_day: str, fitted_model: dict):
+    def _pred(self, pred_day: str, apply_day: str, fitted_model: dict):
         # Get season value and initial discount rate
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
+        pred_mon = pred_day.split('-')[0] + pred_day.split('-')[1]
+        apply_datetime = dt.datetime(*list(map(int, apply_day.split('/'))))
         season = self.day_to_season[pred_datetime]
         init_disc = self.day_to_disc_init[pred_datetime]
-
-        # Set initial capacity of model
-        pred_mon = pred_day.split('-')[0] + pred_day.split('-')[1]
-        init_capa = {'av': self.mon_to_capa_init[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
-                     'k3': self.mon_to_capa_init[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
-                     'vl': self.mon_to_capa_init[(pred_mon, 'AVANTE')] - self.avg_unavail_capa}
+        init_res = self.day_to_init_res_cnt[pred_day]
+        init_util = self.day_to_init_res_util[pred_day]
+        init_capa = {key: self.mon_to_capa_init[(pred_mon, val)] - self.avg_unavail_capa for key,
+                                                                                    val in self.model_type_map.items()}
+        # Calculate lead time vector
+        lead_time = (pred_datetime - apply_datetime).days
+        lead_time_vec = self.lt_to_lt_vec[lead_time * -1]
 
         # Make initial values dataframe
-        pred_input = self._get_pred_input(season=season, init_disc=init_disc)
-
-        pred_result = self._pred_fitted_model(pred_input=pred_input, fitted_model=fitted_model)
+        pred_input = self._get_pred_input_init(season=season, lead_time_vec=lead_time_vec,
+                                               res_cnt=init_res, disc=init_disc)
+        pred_result = self._pred_fitted_model(pred_input=pred_input,
+                                              season=season,
+                                              init_data=[init_res, init_util, init_disc],
+                                              lead_time_vec=lead_time_vec,
+                                              fitted_model=fitted_model)
 
         # Map lead time to prediction results
         lt_to_pred_result = self._get_lt_to_pred_result(pred_result=pred_result)
-
         result = self._map_rslt_to_lead_time(pred_final=lt_to_pred_result)
 
         # Result data convert to dataframe
@@ -132,52 +146,37 @@ class ResPredLeadTime(object):
 
         print(f'Prediction result on {pred_day} is saved')
 
-    def _get_pred_input(self, season: int, init_disc: int):
-        pred_input = {}
-        for data_type in self.data_type:
-            input_model = {}
-            for model in self.model_type:
-                input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec, 'discount': init_disc})
-            pred_input[data_type] = input_model
-
-        return pred_input
-
     ####################################
     # 2. Data & Variable Initialization
     ####################################
-    def _load_data(self):
-        # Load Reservation Count dataset
-        self.cnt_inc_av_ad = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_inc_av_ad.csv'))
-        self.cnt_inc_av_new = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_inc_av_new.csv'))
-        self.cnt_inc_k3 = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_inc_k3.csv'))
-        self.cnt_inc_soul = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_inc_soul.csv'))
-        self.cnt_inc_vlst = pd.read_csv(os.path.join(self.load_path_data, 'disc_res_inc_vlst.csv'))
+    def _load_data_hx(self):
+        res_data_hx = defaultdict(dict)
+        data_types = copy.deepcopy(self.data_type)
+        data_types.remove('disc')
+        for data_type in data_types:
+            for model in self.model_type:
+                res_data_hx[data_type].update({model: pd.read_csv(os.path.join(self.path_data, data_type,
+                                                               data_type + '_' + model + '.csv'))})
+        # Reservation discunt
+        res_data_hx['disc'] = res_data_hx['cnt_cum']
 
-        # Load Reservation Utilization dataset
-        self.util_inc_av_ad = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_inc_av_ad.csv'))
-        self.util_inc_av_new = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_inc_av_new.csv'))
-        self.util_inc_k3 = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_inc_k3.csv'))
-        self.util_inc_soul = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_inc_soul.csv'))
-        self.util_inc_vlst = pd.read_csv(os.path.join(self.load_path_data, 'disc_util_inc_vlst.csv'))
+        self.res_data_hx = res_data_hx
 
-    def _set_split_map(self):
-        data_map = {'cnt': {'av_ad': self.cnt_inc_av_ad,
-                            'av_new': self.cnt_inc_av_new,
-                            'k3': self.cnt_inc_k3,
-                            'soul': self.cnt_inc_soul,
-                            'vlst': self.cnt_inc_vlst},
-                    'util': {'av_ad': self.util_inc_av_ad,
-                             'av_new': self.util_inc_av_new,
-                             'k3': self.util_inc_k3,
-                             'soul': self.util_inc_soul,
-                             'vlst': self.util_inc_vlst}}
+        return res_data_hx
 
-        split_map = {'cnt': {'drop': 'cnt_add',
-                             'target': 'cnt_add'},
-                     'util': {'drop': ['util_add', 'util_rate_add'],
-                              'target': 'util_rate_add'}}
+    def _set_split_map(self, data: dict):
+        split_map = {'cnt_inc': {'drop': 'cnt_add',
+                                 'target': 'cnt_add'},
+                     'cnt_cum': {'drop': 'cnt_cum',
+                                 'target': 'cnt_cum'},
+                     'util_inc': {'drop': ['util_add', 'util_rate_add'],
+                                  'target': 'util_rate_add'},
+                     'util_cum': {'drop': ['util_cum', 'util_rate_cum'],
+                                  'target': 'util_rate_cum'},
+                     'disc': {'drop': ['disc_mean'],
+                              'target': 'disc_mean'}}
 
-        return data_map, split_map
+        self.split_map = split_map
 
     ##################################
     # 2. Data Preprcessing
@@ -194,8 +193,8 @@ class ResPredLeadTime(object):
         return io
 
     def _split_to_input_target(self, data_type: str, model: str):
-        x = self.data_map[data_type][model].drop(columns=self.split_map[data_type]['drop'])
-        y = self.data_map[data_type][model][self.split_map[data_type]['target']]
+        x = self.res_data_hx[data_type][model].drop(columns=self.split_map[data_type]['drop'])
+        y = self.res_data_hx[data_type][model][self.split_map[data_type]['target']]
 
         return {'x': x, 'y': y}
 
@@ -267,7 +266,7 @@ class ResPredLeadTime(object):
         for type_key, type_val in regr_bests.items():
             for model_key, model_val in type_val.items():
                 best_params = model_val.get_params()
-                f = open(os.path.join(self.save_path, type_key + '_' + model_key + '_' + regr + '_params.pickle'), 'wb')
+                f = open(os.path.join(self.path_model, type_key, regr + '_params_' + model_key + '.pickle'), 'wb')
                 pickle.dump(best_params, f)
                 f.close()
 
@@ -275,7 +274,7 @@ class ResPredLeadTime(object):
     # 4. Prediction
     ##################################
     def _set_pred_init_variables(self):
-        self.day_to_res_cnt_init = self._get_init_res_cnt()
+
         self.day_to_season = self._get_seasonal_map()
         self.day_to_disc_init = self._get_init_disc_map()
         self.mon_to_capa_init = self._get_init_capa()
@@ -286,6 +285,7 @@ class ResPredLeadTime(object):
         load_path = os.path.join('..', 'input', 'reservation')
         res_curr = pd.read_csv(os.path.join(load_path, 'res_' + self.res_update_day + '.csv'), delimiter='\t')
 
+        # Rename columns
         res_remap_cols = {
             '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
             '고객구분': 'cust_kind', '고객구분명': 'cust_kind_nm', '총 청구액(VAT포함)': 'tot_fee',
@@ -293,10 +293,32 @@ class ResPredLeadTime(object):
             '대여일': 'rent_day', '대여시간': 'rent_time', '반납일': 'return_day', '반납시간': 'return_time',
             '대여기간(일)': 'rent_period_day', '대여기간(시간)': 'rent_period_time',
             'CDW요금': 'cdw_fee', '할인유형': 'discount_type', '할인유형명': 'discount_type_nm',
-            '적용할인명': 'applyed_discount', '적용할인율(%)': 'discount_rate', '회원등급': 'member_grd',
+            '적용할인명': 'applyed_discount', '적용할인율(%)': 'discount', '회원등급': 'member_grd',
             '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
         res_curr = res_curr.rename(columns=res_remap_cols)
 
+        # filter only 1.6 grade car group
+        res_curr = res_curr[res_curr['res_model_nm'].isin([
+            '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)',
+            '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)'])]
+
+        # Group Car Model
+        conditions = [
+            res_curr['res_model_nm'] == '아반떼 AD (G) F/L',
+            res_curr['res_model_nm'] == '올 뉴 아반떼 (G)',
+            res_curr['res_model_nm'] == 'ALL NEW K3 (G)',
+            res_curr['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)']),
+            res_curr['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
+        values = self.model_type
+        res_curr['res_model_grp'] = np.select(conditions, values)
+
+        # Drop columns 1
+        res_curr = res_curr.drop(columns=['res_model_nm'], errors='ignore')
+        res_curr = res_curr.sort_values(by=['rent_day', 'res_day'])
+
+        res_util = self._get_res_util(df=res_curr)
+
+        # Drop columns 2
         res_drop_col = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee',
                         'res_model', 'car_grd', 'rent_time', 'return_day', 'return_time', 'rent_period_day',
                         'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm', 'sale_purpose',
@@ -306,34 +328,76 @@ class ResPredLeadTime(object):
         res_curr['rent_day'] = pd.to_datetime(res_curr['rent_day'], format='%Y-%m-%d')
         res_curr['res_day'] = pd.to_datetime(res_curr['res_day'], format='%Y-%m-%d')
 
-        # filter only 1.6 grade car group
-        res_curr = res_curr[res_curr['res_model_nm'].isin([
-            'K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)',
-            '아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
-            '더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)'
-        ])]
+        # Grouping
+        cnt_cum = res_curr.groupby(by=['rent_day', 'res_model_grp']).count()['res_num']
+        cnt_cum = cnt_cum.reset_index(level=(0, 1))
 
-        # Car Model group
-        # SOUL 모델은 VELOSTER 모델에 포함해서 분석 (실적 데이터가 적음)
-        conditions = [
-            res_curr['res_model_nm'].isin(['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']),
-            res_curr['res_model_nm'].isin(['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']),
-            res_curr['res_model_nm'].isin(['더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)'])]
-        values = ['k3', 'av', 'vl']
-        res_curr['res_model_grp'] = np.select(conditions, values)
-
-        res_curr = res_curr.drop(columns=['res_model_nm'], errors='ignore')
-        res_curr = res_curr.sort_values(by=['rent_day', 'res_day'])
-
-        res_cnt = res_curr.groupby(by=['rent_day', 'res_model_grp']).count()['res_num']
-        res_cnt = res_cnt.reset_index(level=(0, 1))
-
-        res_curr_dict = defaultdict(dict)
-        for day, model, cnt in zip(res_cnt['rent_day'], res_cnt['res_model_grp'], res_cnt['res_num']):
+        res_cnt_dict = defaultdict(dict)
+        for day, model, cnt in zip(cnt_cum['rent_day'], cnt_cum['res_model_grp'], cnt_cum['res_num']):
             day_str = day.strftime('%Y-%m-%d')
-            res_curr_dict[day_str].update({model: cnt})
+            res_cnt_dict[day_str].update({model: cnt})
 
-        return res_curr_dict
+        util_cum = res_util.groupby(by=['rent_day', 'res_model_grp']).sum()['util_rate']
+        util_cum = util_cum.reset_index(level=(0, 1))
+
+        res_util_dict = defaultdict(dict)
+        for day, model, util in zip(util_cum['rent_day'], util_cum['res_model_grp'], util_cum['util_rate']):
+            mon_str = day.strftime('%Y%m')
+            day_str = day.strftime('%Y-%m-%d')
+            res_util_dict[day_str].update({model: util / self.mon_to_capa_init[(mon_str, self.model_type_map[model])]})
+
+        return res_cnt_dict, res_util_dict
+
+    @staticmethod
+    def _get_res_util(df: pd.DataFrame):
+        res_util = []
+        for rent_d, rent_t, return_d, return_t, res_day, discount, model in zip(
+                df['rent_day'], df['rent_time'], df['return_day'], df['return_time'],
+                df['res_day'], df['discount'], df['res_model_grp']):
+
+            day_hour = timedelta(hours=24)
+            six_hour = timedelta(hours=6)
+            date_range = pd.date_range(start=rent_d, end=return_d)  # days of rent periods
+            date_len = len(date_range)
+            fst = list(map(int, rent_t.split(':')))
+            lst = list(map(int, return_t.split(':')))
+            ft = timedelta(hours=fst[0], minutes=fst[1])  # time of rent day
+            lt = timedelta(hours=lst[0] + 2, minutes=lst[1])  # time of return day
+
+            f_util = 1
+            l_util = 1
+            # Classify reservation periods
+            # If periods is more than 6 hours, utilization is 1
+            if (day_hour - ft) < six_hour:
+                f_util = (day_hour - ft) / six_hour
+            # If periods is less than 6 hours, utilization is
+            if lt < six_hour:
+                l_util = lt / six_hour
+
+            if date_len > 2:
+                util = np.array(f_util)
+                util = np.append(util, np.ones(date_len - 2))
+                util = np.append(util, l_util)
+
+            elif date_len == 2:
+                util = np.array([f_util, l_util])
+
+            else:
+                util = 1
+                if (lt - ft) < six_hour:
+                    util = (lt - ft) / six_hour
+                util = np.array([util])
+
+            res_util.extend(np.array([
+                date_range,
+                [res_day] * date_len,
+                util,
+                [discount] * date_len,
+                [model] * date_len
+            ]).T)
+        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util_rate', 'discount', 'res_model_grp'])
+
+        return res_util_df
 
     @staticmethod
     def _get_seasonal_map():
@@ -360,13 +424,13 @@ class ResPredLeadTime(object):
     def _get_init_capa():
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_init = pd.read_csv(os.path.join(load_path, 'capa_curr_model.csv'), delimiter='\t',
+        capa_init = pd.read_csv(os.path.join(load_path, 'capa_curr_car.csv'), delimiter='\t',
                                 dtype={'date': str, 'model': str, 'capa': int})
-        day_to_capa_init = {(date, model): capa for date, model, capa in zip(capa_init['date'],
+        mon_to_capa_init = {(date, model): capa for date, model, capa in zip(capa_init['date'],
                                                                              capa_init['model'],
                                                                              capa_init['capa'])}
 
-        return day_to_capa_init
+        return mon_to_capa_init
 
     @staticmethod
     def _get_lead_time():
@@ -383,8 +447,7 @@ class ResPredLeadTime(object):
         for data_type in self.data_type:
             model_bests = {}
             for model in self.model_type:
-                f = open(os.path.join(self.load_path_model, data_type + '_' + model + '_' +
-                                      regr + '_params.pickle'), 'rb')
+                f = open(os.path.join(self.path_model, data_type, regr + '_params_' + model + '.pickle'), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
             regr_bests[data_type] = model_bests
@@ -405,18 +468,65 @@ class ResPredLeadTime(object):
         return fitted
 
     @staticmethod
-    def _pred_fitted_model(pred_input: dict, fitted_model: dict):
-        pred_results = {}
-        for type_key, type_val in fitted_model.items():
-            pred_models = {}
+    def _chg_dict_structure(fitted: dict):
+        fitted_re = defaultdict(dict)
+        for type_key, type_val in fitted.items():
             for model_key, model_val in type_val.items():
-                pred = model_val.predict(pred_input[type_key][model_key])
-                if (type_key == 'cnt') or (type_key == 'disc'):
-                    pred = np.round(pred, 1)
+                fitted_re[model_key].update({type_key: model_val})
+
+        return fitted_re
+
+    def _get_pred_input_init(self, season: int, lead_time_vec: int, res_cnt: dict, disc: int):
+        pred_input = defaultdict(dict)
+        for model in self.model_type:
+            for data_type in self.data_type:
+                if data_type in ['disc']:
+                    pred_input[model].update({data_type: np.array([season, lead_time_vec,
+                                                                   res_cnt.get(model, 0)]).reshape(1, -1)})
                 else:
-                    pred = np.round(pred, 3)
-                pred_models[model_key] = pred
-            pred_results[type_key] = pred_models
+                    pred_input[model].update({data_type: np.array([season, lead_time_vec, disc]).reshape(1, -1)})
+
+        return pred_input
+
+    def _get_pred_input(self, season: int, lead_time_vec: int, res_cnt: int, disc: int):
+        pred_input = defaultdict(dict)
+        for data_type in self.data_type:
+            if data_type in ['disc']:
+                pred_input[data_type] = np.array([season, lead_time_vec, res_cnt]).reshape(1, -1)
+            else:
+                pred_input[data_type] = np.array([season, lead_time_vec, disc]).reshape(1, -1)
+
+        return pred_input
+
+    def _pred_fitted_model(self, pred_input: dict, season: int, init_data: list, lead_time_vec: int,  fitted_model: dict):
+        pred_results = {}
+
+        # Calculate first row
+        temp_dict = defaultdict(dict)
+        for model_key, model_val in fitted_model.items():   # ad_av / ad_new / k3 / soul / vlst
+            temp_dict[model_key].update({'lead_time_vec': [lead_time_vec]})
+            temp_dict[model_key].update({'res_cnt': [init_data[0].get(model_key, 0)]})
+            temp_dict[model_key].update({'res_util': [init_data[1].get(model_key, 0)]})
+            temp_dict[model_key].update({'disc': [init_data[2]]})
+            for type_key, type_val in model_val.items():    # cnt_inc / cnt_cum / util_inc / util_cum / disc
+                temp_dict[model_key].update({'exp_' + type_key: [type_val.predict(pred_input[model_key][type_key])[0]]})
+
+        # Calculate continuous rows
+        for lt_vec in np.arange(lead_time_vec + 1, 1):
+            for model_key, model_val in fitted_model.items():
+                temp_dict[model_key]['lead_time_vec'].append(lt_vec)
+                # Calculate
+                cnt = temp_dict[model_key]['res_cnt'][-1] + temp_dict[model_key]['exp_cnt_inc'][-1]
+                util = temp_dict[model_key]['res_util'][-1] + temp_dict[model_key]['exp_util_inc'][-1]
+                disc = temp_dict[model_key]['exp_disc'][-1]
+                temp_dict[model_key]['res_cnt'].append(round(cnt, 2))
+                temp_dict[model_key]['res_util'].append(round(util, 2))
+                temp_dict[model_key]['disc'].append(round(disc,2))
+
+                # Expectation
+                pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc)
+                for type_key, type_val in model_val.items():
+                    temp_dict[model_key]['exp_' + type_key].append(type_val.predict(pred_temp[type_key])[0])
 
         return pred_results
 
