@@ -74,9 +74,10 @@ def model_sales_pred(start_date: str, end_date: str, apply_day: str, res_update_
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
     # Predict reservation changing trend
-    pred_lead_time = SalesPredict(res_update_day=res_update_day)
-    # pred_lead_time.train()
-    pred_lead_time.predict(pred_days=pred_days, apply_day=apply_day)
+    pred_sales = SalesPredict(res_update_day=res_update_day)
+    # pred_sales.data_preprocessing()
+    # pred_sales.train()
+    pred_sales.predict(pred_days=pred_days, apply_day=apply_day)
 
     # Recommend discount rate
     # disc_rec_lead_time = DiscRecLeadTime(res_update_day=res_update_day)
@@ -92,7 +93,8 @@ m1_end_date = 20201031
 n_test = 28  # 4 weeks
 # Prediction days
 # start_date = '2020/12/01'
-start_date = '2020/12/10'
+# start_date = '2020/12/10'
+start_date = '2021/02/26'
 end_date = '2021/02/28'
 apply_day = '2020/12/01'
 
