@@ -93,8 +93,8 @@ m1_end_date = 20201031
 n_test = 28  # 4 weeks
 # Prediction days
 # start_date = '2020/12/01'
-# start_date = '2020/12/10'
-start_date = '2021/02/26'
+start_date = '2020/12/10'
+# start_date = '2021/02/26'
 end_date = '2021/02/28'
 apply_day = '2020/12/01'
 

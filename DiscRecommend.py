@@ -287,19 +287,20 @@ class DiscRecommend(object):
     @staticmethod
     def _rec_disc_function(curr: float, exp: float, dmd: float):
         """
-        Customized Exponential function
-        curr_util: Current Utilization Rate
-        d: Exp Demand Change Rate
-        ex_util: Exp. Utilization rate
+        Recommendation Objective function
+        curr: Current Utilization Rate
+        exp: Expected Utilization rate
+        dmd: Exp Demand Change Rate (Gaussian scale)
         """
-
-        # Hyperparamters (need to tune)
+        # Hyper-parameters (need to tune)
         theta1 = 1          # Ratio of Decreasing magnitude
-        if curr < exp:      # Ratio of increasing
+        if curr < exp:      # Ratio of increasing magnitude
             theta1 = 0.5
-        theta2 = 0.05  # ratio of increasing / decreasing magnitude : demand
-        phi_low = 1.7  # 1 < phi_low < phi_high < 2
-        phi_high = 1.2  # 1 < phi_low < phi_high < 2
+        theta2 = 0.05  # ratio of demand increasing / decreasing magnitude
+        # Suggestion curve bend
+        # 1 < phi_low < phi_high < 2
+        phi_low = 1.7
+        phi_high = 1.2
 
         if dmd > 0:
             y = 1 - theta1 * (curr ** (phi_high ** (-1 * (curr * theta2 * dmd))) - exp)
