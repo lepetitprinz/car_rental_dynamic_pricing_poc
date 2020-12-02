@@ -75,27 +75,40 @@ class DataPrep(object):
         # Data preprocessing: by model
         self._prep_by_group(df=res_re, group='model', time='re')
 
-    @staticmethod
-    def _drop_col_res_recent(df: pd.DataFrame):
-        drop_cols = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee', 'res_model', 'car_grd',
-                     'rent_period_day', 'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm',
-                     'sale_purpose', 'applyed_discount', 'member_grd', 'sale_purpose', 'car_kind']
+    # Methods for load dataset (History / Recent)
+    def _load_hx_dataset(self):
+        # Load reservation history
+        res_hx = pd.read_csv(os.path.join(self.load_path, 'reservation', 'res_hx.csv'),
+                             dtype={'res_num': str, 'res_route_nm': str, 'res_model_nm': str, 'rent_day': str,
+                                    'rent_time': str, 'return_day': str, 'return_time': str, 'car_rent_fee': int,
+                                    'cdw_fee': int, 'tot_fee': int, 'discount': float, 'res_day': str,
+                                    'seasonality': int})
 
-        return df.drop(columns=drop_cols, errors='ignore')
+        # Load seasonality history
+        season_hx = pd.read_csv(os.path.join(self.load_path, 'seasonality', 'seasonality_hx.csv'), delimiter='\t')
+        season_hx['rent_day'] = pd.to_datetime(season_hx['rent_day'], format='%Y-%m-%d')
+        self.season_hx = season_hx
 
-    @staticmethod
-    def _rename_col_res_recent(df: pd.DataFrame):
-        rename_cols = {
-            '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
-            '고객구분': 'cust_kind', '고객구분명': 'cust_kind_nm', '총 청구액(VAT포함)': 'tot_fee',
-            '예약모델': 'res_model', '예약모델명': 'res_model_nm', '차급': 'car_grd',
-            '대여일': 'rent_day', '대여시간': 'rent_time', '반납일': 'return_day', '반납시간': 'return_time',
-            '대여기간(일)': 'rent_period_day', '대여기간(시간)': 'rent_period_time',
-            'CDW요금': 'cdw_fee', '할인유형': 'discount_type', '할인유형명': 'discount_type_nm',
-            '적용할인명': 'applyed_discount', '적용할인율(%)': 'discount', '회원등급': 'member_grd',
-            '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
+        # Load capacity history of car models
+        capa_hx_path = os.path.join('..', 'input', 'capa')
 
-        return df.rename(columns=rename_cols)
+        # Capacity of models
+        capa_hx_model = pd.read_csv(os.path.join(capa_hx_path, 'capa_hx_model.csv'), delimiter='\t',
+                                    dtype={'date': str, 'model': str, 'capa': int})
+        self.capa_hx_model = {(month, model): capa for month, model, capa in zip(capa_hx_model['date'],
+                                                                                 capa_hx_model['model'],
+                                                                                 capa_hx_model['capa'])}
+
+        # Capacity of cars
+        capa_hx_car = pd.read_csv(os.path.join(capa_hx_path, 'capa_hx_car.csv'), delimiter='\t',
+                                  dtype={'date': str, 'model': str, 'capa': int})
+        self.capa_hx_car = {(month, model): capa for month, model, capa in zip(capa_hx_car['date'],
+                                                                               capa_hx_car['model'],
+                                                                               capa_hx_car['capa'])}
+        self.capa = {'hx': {'model': self.capa_hx_model,
+                            'car': self.capa_hx_car}}
+
+        return res_hx
 
     def _load_recent_dataset(self, update_day: str):
         # Seasonal dataset
@@ -139,28 +152,9 @@ class DataPrep(object):
 
         return pd.read_csv(data_path, delimiter='\t', dtype=data_type)
 
-    @staticmethod
-    def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
-        months = np.sort(df['date'].unique())
-        days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
-        model_unique = df[['model', 'capa']].drop_duplicates()
-
-        df_days = pd.DataFrame()
-        for model, capa in zip(model_unique['model'], model_unique['capa']):
-            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
-            df_days = pd.concat([df_days, temp], axis=0)
-
-        return df_days
-
-    @staticmethod
-    def _apply_unavail_capa(capa: pd.DataFrame, capa_unavail: pd.DataFrame):
-        capa_unavail['date'] = pd.to_datetime(capa_unavail['date'], format='%Y%m%d')
-        capa_new = pd.merge(capa, capa_unavail, how='left', on=['date', 'model'], left_index=True, right_index=False)
-        capa_new = capa_new.fillna(0)
-        capa_new['capa'] = capa_new['capa'] - capa_new['unavail']
-
-        return capa_new
-
+    ################################
+    # Methods for grouping dataset
+    ################################
     def _prep_by_group(self, df: pd.DataFrame, group: str, time: str):
         # Group by
         df = self._cluster_by_group(df=df, group=group)
@@ -178,46 +172,69 @@ class DataPrep(object):
         # Group
         self._grp_by_disc(df=df, group=group, time=time)
 
-    def _load_hx_dataset(self):
-        # Load reservation history
-        res_hx = pd.read_csv(os.path.join(self.load_path, 'reservation', 'res_hx.csv'),
-                             dtype={'res_num': str, 'res_route_nm': str, 'res_model_nm': str, 'rent_day': str,
-                                    'rent_time': str, 'return_day': str, 'return_time': str, 'car_rent_fee': int,
-                                    'cdw_fee': int, 'tot_fee': int, 'discount': float, 'res_day': str,
-                                    'seasonality': int})
+    @staticmethod
+    def _cluster_by_group(df: pd.DataFrame, group: str):
+        if group == 'car':
+            av_ad = ['아반떼 AD (G)', '아반떼 AD (G) F/L']
+            k3 = ['ALL NEW K3 (G)']
+            soul = ['쏘울 (G)', '쏘울 부스터 (G)']
 
-        # Load seasonality history
-        season_hx = pd.read_csv(os.path.join(self.load_path, 'seasonality', 'seasonality_hx.csv'), delimiter='\t')
-        season_hx['rent_day'] = pd.to_datetime(season_hx['rent_day'], format='%Y-%m-%d')
-        self.season_hx = season_hx
+            conditions = [
+                df['res_model_nm'].isin(av_ad),
+                df['res_model_nm'] == '올 뉴 아반떼 (G)',
+                df['res_model_nm'].isin(k3),
+                df['res_model_nm'].isin(soul),
+                df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
+            values = ['아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
 
-        # Load capacity history of car models
-        capa_hx_path = os.path.join('..', 'input', 'capa')
+            df['res_model'] = np.select(conditions, values)
 
-        # Capacity of models
-        capa_hx_model = pd.read_csv(os.path.join(capa_hx_path, 'capa_hx_model.csv'), delimiter='\t',
-                                    dtype={'date': str, 'model': str, 'capa': int})
-        self.capa_hx_model = {(month, model): capa for month, model, capa in zip(capa_hx_model['date'],
-                                                                                 capa_hx_model['model'],
-                                                                                 capa_hx_model['capa'])}
+        elif group == 'model':
+            av = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']
+            k3 = ['ALL NEW K3 (G)']
+            vl = ['더 올 뉴 벨로스터 (G)']
+            su = ['쏘울 (G)', '쏘울 부스터 (G)']
 
-        # Capacity of cars
-        capa_hx_car = pd.read_csv(os.path.join(capa_hx_path, 'capa_hx_car.csv'), delimiter='\t',
-                                  dtype={'date': str, 'model': str, 'capa': int})
-        self.capa_hx_car = {(month, model): capa for month, model, capa in zip(capa_hx_car['date'],
-                                                                               capa_hx_car['model'],
-                                                                               capa_hx_car['capa'])}
-        self.capa = {'hx': {'model': self.capa_hx_model,
-                            'car': self.capa_hx_car}}
+            conditions = [
+                df['res_model_nm'].isin(av),
+                df['res_model_nm'].isin(k3),
+                df['res_model_nm'].isin(vl),
+                df['res_model_nm'].isin(su)]
+            values = ['AVANTE', 'K3', 'VELOSTER', 'SOUL']
 
-        return res_hx
+            df['res_model'] = np.select(conditions, values)
+
+        return df
+
+    @staticmethod
+    def _add_lead_time_vec(df: pd.DataFrame):
+        # Add lead time
+        df['lead_time'] = df['rent_day'] - df['res_day']
+        df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
+
+        # Add lead time vector
+        df['lead_time_vec'] = (df['lead_time'] // 7) + 24       # Lead time > 28 : 1 week
+        df['lead_time_vec'] = np.where(df['lead_time_vec'] < 28,  # Lead time 1 ~ 27
+                                       df['lead_time'].values,
+                                       df['lead_time_vec'].values)
+        df['lead_time_vec'] = np.where(df['lead_time_vec'] > 36, 36,  # Lead time > 36
+                                       df['lead_time_vec'].values)
+
+        # Change data type
+        # df['lead_time'] = df['lead_time'] * -1
+        df['lead_time_vec'] = df['lead_time_vec'] * -1
+        # df['lead_time'] = df['lead_time'].astype(int)
+        df['lead_time_vec'] = df['lead_time_vec'].astype(int)
+        df = df.drop(columns=['lead_time'])
+
+        return df
 
     def _grp_by_disc(self, df: pd.DataFrame, group: str, time: str):
         # Reservation
         disc_res_inc, disc_res_cum = self._grp_by_disc_cnt(res_cnt=df)
 
         # Utilization
-        res_util = self._get_res_util(df=df)      # convert reservation to utilization dataset
+        res_util = self._get_res_util(df=df)  # convert reservation to utilization dataset
         disc_util_inc, disc_util_cum = self._grp_by_disc_util(res_util=res_util, group=group, time=time)
 
         if time == 'hx':
@@ -246,97 +263,61 @@ class DataPrep(object):
         self._save_model(type_data=disc_util_inc_grp, type_name='util_inc', group=group, time=time)
         self._save_model(type_data=disc_util_cum_grp, type_name='util_cum', group=group, time=time)
 
-    @staticmethod
-    def _add_lead_time(df: pd.DataFrame):
-        df['lead_time'] = df['rent_day'] - df['res_day']
-        df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
-        df['lead_time'] = df['lead_time'] * -1
+    def _grp_by_disc_cnt(self, res_cnt: pd.DataFrame):
+        # Reservation change on current discount
+        disc_res_inc = self._grp_by_disc_res_inc(res_cnt=res_cnt)
+        # Utilization change on current discount
+        disc_res_cum = self._grp_by_disc_res_cum(res_cnt=res_cnt)
 
-        return df
-
-    def _set_capa(self, x, time, group):
-        return self.capa[time][group][(x[0], x[1])]
-
-    def _add_capacity(self, util: pd.DataFrame, group: str, time: str):
-        # util['month'] = util['rent_day'].dt.strftime('%Y%m')
-        if group == 'car':
-            util['capa'] = util[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
-        elif group == 'model':
-            util['capa'] = util[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
-        return util
+        return disc_res_inc, disc_res_cum
 
     @staticmethod
-    def _div_into_group(df, group: str, time: str):
-        groups = []
-        if group == 'car':
-            groups = ['아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
-        elif group == 'model':
-            groups = ['AVANTE', 'K3', 'VELOSTER', 'SOUL']
-        model_grp = {}
-        for group in groups:
-            if time == 'hx':
-                model_grp[group] = df.loc[group].reset_index(level=(0, 1))
-            elif time == 're':
-                model_grp[group] = df[df['res_model'] == group]
+    def _grp_by_disc_res_inc(res_cnt: pd.DataFrame):
+        # Group reservation counts
+        cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
+        cnt = cnt.rename('cnt_add')
 
-        return model_grp
+        # Group discount rates
+        disc = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).mean()['discount']
+        ss_lt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).mean()[['seasonality', 'lead_time_vec']]
 
-    @staticmethod
-    def _save_model(type_data: dict, type_name: str, group: str, time: str):
-        model_nm_map = {}
-        if group == 'car':
-            model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new', 'ALL NEW K3 (G)': 'k3',
-                            '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
-        elif group == 'model':
-            # model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl'}
-            model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl', 'SOUL': 'su'}
+        # Merge and reset index
+        disc_res_inc = pd.concat([ss_lt, disc, cnt], axis=1)
+        disc_res_inc = disc_res_inc.reset_index(level=(0, 1, 2))
 
-        save_path = os.path.join('..', 'result', 'data', 'model_2', time, group)
-        for model, data in type_data.items():
-            data.to_csv(os.path.join(save_path, type_name, type_name + '_' + model_nm_map[model] + '.csv'), index=False)
-            print(f'{model} of {type_name} data is saved.')
+        # Change data types
+        disc_res_inc['seasonality'] = disc_res_inc['seasonality'].astype(int)
+        disc_res_inc['lead_time_vec'] = disc_res_inc['lead_time_vec'].astype(int)
+
+        return disc_res_inc
 
     @staticmethod
-    def _get_res_util_bak(df: pd.DataFrame):
-        res_util = []
-        for rent_d, rent_t, return_d, return_t, res_day, discount, model in zip(
-                df['rent_day'], df['rent_time'], df['return_day'], df['return_time'],
-                df['res_day'], df['discount'], df['res_model']):
+    def _grp_by_disc_res_cum(res_cnt: pd.DataFrame):
+        # Group reservation counts
+        cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
+        cnt_cum = cnt.groupby(by=['rent_day', 'res_model']).cumsum()
 
-            day_hour = timedelta(hours=24)
-            date_range = pd.date_range(start=rent_d, end=return_d)  # days of rent periods
-            date_len = len(date_range)
-            fst = list(map(int, rent_t.split(':')))
-            lst = list(map(int, return_t.split(':')))
-            ft = timedelta(hours=fst[0], minutes=fst[1])  # time of rent day
-            lt = timedelta(hours=lst[0] + 2, minutes=lst[1])  # time of return day
+        # Group discount rates
+        disc = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).sum()['discount']
+        disc_cum = disc.groupby(by=['rent_day', 'res_model']).cumsum()
 
-            # Classify reservation periods
-            f_util = (day_hour - ft) / day_hour
-            l_util = lt / day_hour
+        cum = pd.DataFrame({'cnt_cum': cnt_cum, 'disc_cum': disc_cum}, index=cnt_cum.index)
+        cum['disc_mean'] = cum['disc_cum'] / cum['cnt_cum']
 
-            if date_len > 2:
-                util = np.array(f_util)
-                util = np.append(util, np.ones(date_len - 2))
-                util = np.append(util, l_util)
+        ss_lt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).mean()[['seasonality', 'lead_time_vec']]
 
-            elif date_len == 2:
-                util = np.array([f_util, l_util])
+        # Merge and reset index
+        disc_res_cum = pd.concat([ss_lt, cum], axis=1)
+        disc_res_cum = disc_res_cum.reset_index(level=(0, 1, 2))
 
-            else:
-                util = (lt - ft) / day_hour
-                util = np.array([util])
+        # Drop unnecessary columns
+        disc_res_cum = disc_res_cum.drop(columns=['disc_cum'])
 
-            res_util.extend(np.array([
-                date_range,
-                [res_day] * date_len,
-                util,
-                [discount] * date_len,
-                [model] * date_len
-            ]).T)
-        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util_rate', 'discount', 'res_model'])
+        # Change data types
+        disc_res_cum['seasonality'] = disc_res_cum['seasonality'].astype(int)
+        disc_res_cum['lead_time_vec'] = disc_res_cum['lead_time_vec'].astype(int)
 
-        return res_util_df
+        return disc_res_cum
 
     @staticmethod
     def _get_res_util(df: pd.DataFrame):
@@ -389,13 +370,141 @@ class DataPrep(object):
 
         return res_util_df
 
-    def _grp_by_disc_cnt(self, res_cnt: pd.DataFrame):
-        # Reservation change on current discount
-        disc_res_inc = self._grp_by_disc_res_inc(res_cnt=res_cnt)
-        # Utilization change on current discount
-        disc_res_cum = self._grp_by_disc_res_cum(res_cnt=res_cnt)
+    @staticmethod
+    def _get_res_util_bak(df: pd.DataFrame):
+        res_util = []
+        for rent_d, rent_t, return_d, return_t, res_day, discount, model in zip(
+                df['rent_day'], df['rent_time'], df['return_day'], df['return_time'],
+                df['res_day'], df['discount'], df['res_model']):
 
-        return disc_res_inc, disc_res_cum
+            day_hour = timedelta(hours=24)
+            date_range = pd.date_range(start=rent_d, end=return_d)  # days of rent periods
+            date_len = len(date_range)
+            fst = list(map(int, rent_t.split(':')))
+            lst = list(map(int, return_t.split(':')))
+            ft = timedelta(hours=fst[0], minutes=fst[1])  # time of rent day
+            lt = timedelta(hours=lst[0] + 2, minutes=lst[1])  # time of return day
+
+            # Classify reservation periods
+            f_util = (day_hour - ft) / day_hour
+            l_util = lt / day_hour
+
+            if date_len > 2:
+                util = np.array(f_util)
+                util = np.append(util, np.ones(date_len - 2))
+                util = np.append(util, l_util)
+
+            elif date_len == 2:
+                util = np.array([f_util, l_util])
+
+            else:
+                util = (lt - ft) / day_hour
+                util = np.array([util])
+
+            res_util.extend(np.array([
+                date_range,
+                [res_day] * date_len,
+                util,
+                [discount] * date_len,
+                [model] * date_len
+            ]).T)
+        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util_rate', 'discount', 'res_model'])
+
+        return res_util_df
+
+    @staticmethod
+    def _drop_col_res_recent(df: pd.DataFrame):
+        drop_cols = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee', 'res_model', 'car_grd',
+                     'rent_period_day', 'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm',
+                     'sale_purpose', 'applyed_discount', 'member_grd', 'sale_purpose', 'car_kind']
+
+        return df.drop(columns=drop_cols, errors='ignore')
+
+    @staticmethod
+    def _rename_col_res_recent(df: pd.DataFrame):
+        rename_cols = {
+            '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
+            '고객구분': 'cust_kind', '고객구분명': 'cust_kind_nm', '총 청구액(VAT포함)': 'tot_fee',
+            '예약모델': 'res_model', '예약모델명': 'res_model_nm', '차급': 'car_grd',
+            '대여일': 'rent_day', '대여시간': 'rent_time', '반납일': 'return_day', '반납시간': 'return_time',
+            '대여기간(일)': 'rent_period_day', '대여기간(시간)': 'rent_period_time',
+            'CDW요금': 'cdw_fee', '할인유형': 'discount_type', '할인유형명': 'discount_type_nm',
+            '적용할인명': 'applyed_discount', '적용할인율(%)': 'discount', '회원등급': 'member_grd',
+            '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
+
+        return df.rename(columns=rename_cols)
+
+    @staticmethod
+    def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
+        months = np.sort(df['date'].unique())
+        days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
+        model_unique = df[['model', 'capa']].drop_duplicates()
+
+        df_days = pd.DataFrame()
+        for model, capa in zip(model_unique['model'], model_unique['capa']):
+            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
+            df_days = pd.concat([df_days, temp], axis=0)
+
+        return df_days
+
+    @staticmethod
+    def _apply_unavail_capa(capa: pd.DataFrame, capa_unavail: pd.DataFrame):
+        capa_unavail['date'] = pd.to_datetime(capa_unavail['date'], format='%Y%m%d')
+        capa_new = pd.merge(capa, capa_unavail, how='left', on=['date', 'model'], left_index=True, right_index=False)
+        capa_new = capa_new.fillna(0)
+        capa_new['capa'] = capa_new['capa'] - capa_new['unavail']
+
+        return capa_new
+
+    @staticmethod
+    def _add_lead_time(df: pd.DataFrame):
+        df['lead_time'] = df['rent_day'] - df['res_day']
+        df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
+        df['lead_time'] = df['lead_time'] * -1
+
+        return df
+
+    def _set_capa(self, x, time, group):
+        return self.capa[time][group][(x[0], x[1])]
+
+    def _add_capacity(self, util: pd.DataFrame, group: str, time: str):
+        # util['month'] = util['rent_day'].dt.strftime('%Y%m')
+        if group == 'car':
+            util['capa'] = util[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
+        elif group == 'model':
+            util['capa'] = util[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
+        return util
+
+    @staticmethod
+    def _div_into_group(df, group: str, time: str):
+        groups = []
+        if group == 'car':
+            groups = ['아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
+        elif group == 'model':
+            groups = ['AVANTE', 'K3', 'VELOSTER', 'SOUL']
+        model_grp = {}
+        for group in groups:
+            if time == 'hx':
+                model_grp[group] = df.loc[group].reset_index(level=(0, 1))
+            elif time == 're':
+                model_grp[group] = df[df['res_model'] == group]
+
+        return model_grp
+
+    @staticmethod
+    def _save_model(type_data: dict, type_name: str, group: str, time: str):
+        model_nm_map = {}
+        if group == 'car':
+            model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new', 'ALL NEW K3 (G)': 'k3',
+                            '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
+        elif group == 'model':
+            # model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl'}
+            model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl', 'SOUL': 'su'}
+
+        save_path = os.path.join('..', 'result', 'data', 'model_2', time, group)
+        for model, data in type_data.items():
+            data.to_csv(os.path.join(save_path, type_name, type_name + '_' + model_nm_map[model] + '.csv'), index=False)
+            print(f'{model} of {type_name} data is saved.')
 
     def _grp_by_disc_util(self, res_util: pd.DataFrame, group: str, time: str):
         # Increasing reservation count
@@ -433,54 +542,6 @@ class DataPrep(object):
             return pd.merge(df, self.season_re, how='left', on='rent_day', left_index=True, right_index=False)
 
     @staticmethod
-    def _grp_by_disc_res_inc(res_cnt: pd.DataFrame):
-        # Group reservation counts
-        cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
-        cnt = cnt.rename('cnt_add')
-
-        # Group discount rates
-        disc = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).mean()['discount']
-        ss_lt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).mean()[['seasonality', 'lead_time_vec']]
-
-        # Merge and reset index
-        disc_res_inc = pd.concat([ss_lt, disc, cnt], axis=1)
-        disc_res_inc = disc_res_inc.reset_index(level=(0, 1, 2))
-
-        # Change data types
-        disc_res_inc['seasonality'] = disc_res_inc['seasonality'].astype(int)
-        disc_res_inc['lead_time_vec'] = disc_res_inc['lead_time_vec'].astype(int)
-
-        return disc_res_inc
-
-    @staticmethod
-    def _grp_by_disc_res_cum(res_cnt: pd.DataFrame):
-        # Group reservation counts
-        cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
-        cnt_cum = cnt.groupby(by=['rent_day', 'res_model']).cumsum()
-
-        # Group discount rates
-        disc = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).sum()['discount']
-        disc_cum = disc.groupby(by=['rent_day', 'res_model']).cumsum()
-
-        cum = pd.DataFrame({'cnt_cum': cnt_cum, 'disc_cum': disc_cum}, index=cnt_cum.index)
-        cum['disc_mean'] = cum['disc_cum'] / cum['cnt_cum']
-
-        ss_lt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).mean()[['seasonality', 'lead_time_vec']]
-
-        # Merge and reset index
-        disc_res_cum = pd.concat([ss_lt, cum], axis=1)
-        disc_res_cum = disc_res_cum.reset_index(level=(0, 1, 2))
-
-        # Drop unnecessary columns
-        disc_res_cum = disc_res_cum.drop(columns=['disc_cum'])
-
-        # Change data types
-        disc_res_cum['seasonality'] = disc_res_cum['seasonality'].astype(int)
-        disc_res_cum['lead_time_vec'] = disc_res_cum['lead_time_vec'].astype(int)
-
-        return disc_res_cum
-
-    @staticmethod
     def _grp_by_disc_util_inc(res_util: pd.DataFrame):
         util = res_util.groupby(by=['rent_day', 'res_model', 'res_day']).sum()['util_rate']
         util = util.rename('util_add')
@@ -513,66 +574,6 @@ class DataPrep(object):
         disc_util_cum = disc_util_cum.drop(columns=['cnt_cum', 'disc_cum'], errors='ignore')
 
         return disc_util_cum
-
-    @staticmethod
-    def _add_lead_time_vec(df: pd.DataFrame):
-        # Add lead time
-        df['lead_time'] = df['rent_day'] - df['res_day']
-        df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
-
-        # Add lead time vector
-        df['lead_time_vec'] = (df['lead_time'] // 7) + 24       # Lead time > 28 : 1 week
-        df['lead_time_vec'] = np.where(df['lead_time_vec'] < 28,  # Lead time 1 ~ 27
-                                       df['lead_time'].values,
-                                       df['lead_time_vec'].values)
-        df['lead_time_vec'] = np.where(df['lead_time_vec'] > 36, 36,  # Lead time > 36
-                                       df['lead_time_vec'].values)
-
-        # Change data type
-        # df['lead_time'] = df['lead_time'] * -1
-        df['lead_time_vec'] = df['lead_time_vec'] * -1
-        # df['lead_time'] = df['lead_time'].astype(int)
-        df['lead_time_vec'] = df['lead_time_vec'].astype(int)
-        df = df.drop(columns=['lead_time'])
-
-        return df
-
-    @staticmethod
-    def _cluster_by_group(df: pd.DataFrame, group: str):
-        if group == 'car':
-            av_ad = ['아반떼 AD (G)', '아반떼 AD (G) F/L']
-            # k3 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']
-            k3 = ['ALL NEW K3 (G)']
-            soul = ['쏘울 (G)', '쏘울 부스터 (G)']
-
-            conditions = [
-                df['res_model_nm'].isin(av_ad),
-                df['res_model_nm'] == '올 뉴 아반떼 (G)',
-                df['res_model_nm'].isin(k3),
-                df['res_model_nm'].isin(soul),
-                df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
-            values = ['아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
-
-            df['res_model'] = np.select(conditions, values)
-
-        elif group == 'model':
-            av = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']
-            k3 = ['ALL NEW K3 (G)']
-            # k3 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)']
-            # vl = ['더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)']
-            vl = ['더 올 뉴 벨로스터 (G)']
-            su = ['쏘울 (G)', '쏘울 부스터 (G)']
-
-            conditions = [
-                df['res_model_nm'].isin(av),
-                df['res_model_nm'].isin(k3),
-                df['res_model_nm'].isin(vl),
-                df['res_model_nm'].isin(su)]
-
-            values = ['AVANTE', 'K3', 'VELOSTER', 'SOUL']
-            df['res_model'] = np.select(conditions, values)
-
-        return df
 
     def _make_res_hx(self):
         res_hx_17_19, res_hx_20, season_hx = self._load_data_hx()

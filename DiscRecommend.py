@@ -159,79 +159,6 @@ class DiscRecommend(object):
         for df in self.res_exp.values():
             df.rename(columns={'exp_util': 'exp_util_rate'}, inplace=True)
 
-    @staticmethod
-    def _chg_data_scale(output: dict):
-        for model, df in output.items():
-            df['curr_util_time'] = np.round(df['curr_util_time'].to_numpy(), 1)
-            df['curr_util_rate'] = np.round(df['curr_util_rate'].to_numpy(), 1)
-            df['curr_disc_apply'] = np.round(df['curr_disc_apply'].to_numpy(), 1)
-            df['avail_capa'] = np.round(df['avail_capa'].to_numpy(), 1)
-
-        return output
-
-    @staticmethod
-    def _save_result(output: dict, pred_day: str, apply_day: str):
-        df_merged = pd.DataFrame()
-        for model, df in output.items():
-            df_merged = pd.concat([df_merged, df], axis=1)
-
-        apply_day_str = ''.join(apply_day.split('/'))
-        save_path = os.path.join('..', 'result', 'data', 'recommend', 'lead_time', apply_day_str)
-
-        # Make directory
-        if not os.path.exists(save_path):
-            os.mkdir(save_path)
-            os.mkdir(os.path.join(save_path, 'original'))
-            os.mkdir(os.path.join(save_path, 'transpose'))
-
-        # Save results
-        df_merged.to_csv(os.path.join(save_path, 'original', 'rec(' + pred_day + ').csv'),
-                         index=False, encoding='euc-kr')
-        df_merged.T.to_csv(os.path.join(save_path, 'transpose', 'rec_T(' + pred_day + ').csv'),
-                           header=False, encoding='euc-kr')
-
-    def _apply_disc_policy(self, output: dict):
-        rec_output_with_pol = {}
-        vfunc = np.vectorize(self._conv_to_five_times)
-        for model, df in output.items():
-            # Set maximum discount rate: 80%
-            df['rec_disc'] = np.where(df['rec_disc'] > 80, 80, df['rec_disc'])
-            # Convert discount to five times values
-            df['rec_disc'] = vfunc(df['rec_disc'].to_numpy())
-
-            rec_output_with_pol[model] = df
-
-        return rec_output_with_pol
-
-    @staticmethod
-    def _rearrange_column(output: dict):
-        output_rearranged = {}
-        reorder_cols = ['date', 'lead_time', 'curr_cnt', 'curr_util_time', 'curr_util_rate', 'curr_disc',
-                        'curr_disc_apply', 'avail_capa', 'exp_cnt', 'exp_util_cnt', 'exp_util_rate',
-                        'exp_disc', 'rec_disc']
-        for model, df in output.items():
-            df = df[reorder_cols]
-            output_rearranged[model] = df
-
-        return output_rearranged
-
-    @staticmethod
-    def _rename_col_kor(output: dict):
-        rename_col = {
-            'date': '날짜', 'lead_time': '리드타임', 'curr_cnt': '현재 예약건수', 'curr_util_time': '현재 가동대수(시간)',
-            'curr_util_cnt': '현재 가동대수(일)', 'curr_util_rate': '현재 가동률', 'curr_disc': '현재 할인율',
-            'curr_disc_apply': '현재 결제할인율(평균)', 'avail_capa': '이용가능대수', 'exp_cnt': '기대 예약건수',
-            'exp_util_cnt': '기대 가동대수(시간)', 'exp_util_rate': '기대가동률', 'exp_disc': '기대 할인율',
-            'rec_disc': '추천 할인율'}
-
-        output_renamed = {}
-        for model, df in output.items():
-            df = df.rename(columns=rename_col)
-            df = df.reset_index(drop=True)
-            output_renamed[model] = df
-
-        return output_renamed
-
     def _merge_hx_curr_df(self):
         rec_input = {}
         for (model_hx, df_hx), (model_curr, df_curr) in zip(self.res_exp.items(), self.res_cnt_re.items()):
@@ -252,27 +179,6 @@ class DiscRecommend(object):
             df['avail_capa'] = self.capa_re[(pred_datetime, self.model_map[model])] - df['curr_util_time']
 
         return input_dict
-
-    @staticmethod
-    def _conv_to_five_times(discount):
-        if discount % 5 >= 2.5:
-            return (discount // 5 + 1) * 5
-        else:
-            return (discount // 5) * 5
-
-    def _rec_disc(self, input_dict: dict):
-        rec_output = {}
-        for model, df in input_dict.items():
-            df['rec_disc_chg_rate'] = df[['curr_util_rate', 'exp_util_rate']].apply(self._get_rec, axis=1)
-            df['rec_disc'] = df['curr_disc'] * (1 + df['rec_disc_chg_rate'] / 100)
-            df = df.drop(columns=['rec_disc_chg_rate'], errors='ignore')
-            rec_output[model] = df
-
-        return rec_output
-
-    def _get_rec(self, x):
-        return self._rec_disc_function(curr=x[0], exp=x[1], dmd=0)
-        # return self._rec_disc_function(curr=x[0], exp=x[1], dmd=self.exp_dmd_change)
 
     @staticmethod
     def _fill_na(input_dict: dict):
@@ -311,6 +217,20 @@ class DiscRecommend(object):
 
         return input_dict
 
+    def _rec_disc(self, input_dict: dict):
+        rec_output = {}
+        for model, df in input_dict.items():
+            df['rec_disc_chg_rate'] = df[['curr_util_rate', 'exp_util_rate']].apply(self._get_rec, axis=1)
+            df['rec_disc'] = df['curr_disc'] * (1 + df['rec_disc_chg_rate'] / 100)
+            df = df.drop(columns=['rec_disc_chg_rate'], errors='ignore')
+            rec_output[model] = df
+
+        return rec_output
+
+    def _get_rec(self, x):
+        return self._rec_disc_function(curr=x[0], exp=x[1], dmd=0)
+        # return self._rec_disc_function(curr=x[0], exp=x[1], dmd=self.exp_dmd_change)
+
     @staticmethod
     def _rec_disc_function(curr: float, exp: float, dmd: float):
         """
@@ -335,6 +255,86 @@ class DiscRecommend(object):
             y = 1 - theta1 * (curr ** (phi_low ** (-1 * ((1 - curr) * theta2 * dmd))) - exp)
 
         return y
+
+    def _apply_disc_policy(self, output: dict):
+        rec_output_with_pol = {}
+        vfunc = np.vectorize(self._conv_to_five_times)
+        for model, df in output.items():
+            # Set maximum discount rate: 80%
+            df['rec_disc'] = np.where(df['rec_disc'] > 80, 80, df['rec_disc'])
+            # Convert discount to five times values
+            df['rec_disc'] = vfunc(df['rec_disc'].to_numpy())
+
+            rec_output_with_pol[model] = df
+
+        return rec_output_with_pol
+
+    @staticmethod
+    def _conv_to_five_times(discount):
+        if discount % 5 >= 2.5:
+            return (discount // 5 + 1) * 5
+        else:
+            return (discount // 5) * 5
+
+    @staticmethod
+    def _chg_data_scale(output: dict):
+        for model, df in output.items():
+            df['curr_util_time'] = np.round(df['curr_util_time'].to_numpy(), 1)
+            df['curr_util_rate'] = np.round(df['curr_util_rate'].to_numpy(), 1)
+            df['curr_disc_apply'] = np.round(df['curr_disc_apply'].to_numpy(), 1)
+            df['avail_capa'] = np.round(df['avail_capa'].to_numpy(), 1)
+
+        return output
+
+    @staticmethod
+    def _rearrange_column(output: dict):
+        output_rearranged = {}
+        reorder_cols = ['date', 'lead_time', 'curr_cnt', 'curr_util_time', 'curr_util_rate', 'curr_disc',
+                        'curr_disc_apply', 'avail_capa', 'exp_cnt', 'exp_util_cnt', 'exp_util_rate',
+                        'exp_disc', 'rec_disc']
+        for model, df in output.items():
+            df = df[reorder_cols]
+            output_rearranged[model] = df
+
+        return output_rearranged
+
+    @staticmethod
+    def _rename_col_kor(output: dict):
+        rename_col = {
+            'date': '날짜', 'lead_time': '리드타임', 'curr_cnt': '현재 예약건수', 'curr_util_time': '현재 가동대수(시간)',
+            'curr_util_cnt': '현재 가동대수(일)', 'curr_util_rate': '현재 가동률', 'curr_disc': '현재 할인율',
+            'curr_disc_apply': '현재 결제할인율(평균)', 'avail_capa': '이용가능대수', 'exp_cnt': '기대 예약건수',
+            'exp_util_cnt': '기대 가동대수(시간)', 'exp_util_rate': '기대가동률', 'exp_disc': '기대 할인율',
+            'rec_disc': '추천 할인율'}
+
+        output_renamed = {}
+        for model, df in output.items():
+            df = df.rename(columns=rename_col)
+            df = df.reset_index(drop=True)
+            output_renamed[model] = df
+
+        return output_renamed
+
+    @staticmethod
+    def _save_result(output: dict, pred_day: str, apply_day: str):
+        df_merged = pd.DataFrame()
+        for model, df in output.items():
+            df_merged = pd.concat([df_merged, df], axis=1)
+
+        apply_day_str = ''.join(apply_day.split('/'))
+        save_path = os.path.join('..', 'result', 'data', 'recommend', 'lead_time', apply_day_str)
+
+        # Make directory
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+            os.mkdir(os.path.join(save_path, 'original'))
+            os.mkdir(os.path.join(save_path, 'transpose'))
+
+        # Save results
+        df_merged.to_csv(os.path.join(save_path, 'original', 'rec(' + pred_day + ').csv'),
+                         index=False, encoding='euc-kr')
+        df_merged.T.to_csv(os.path.join(save_path, 'transpose', 'rec_T(' + pred_day + ').csv'),
+                           header=False, encoding='euc-kr')
 
     @staticmethod
     def _get_fst_rec_data(output: dict, pred_day: str):
