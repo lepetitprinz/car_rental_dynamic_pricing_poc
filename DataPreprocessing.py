@@ -25,8 +25,6 @@ class DataPrep(object):
         # car grade
         self.grade_1_6 = ['ALL NEW K3 (G)', '아반떼 AD (G)', '아반떼 AD (G) F/L',
                           '올 뉴 아반떼 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
-        # self.grade_1_6 = ['K3', 'THE NEW K3 (G)', 'ALL NEW K3 (G)', '아반떼 AD (G)', '아반떼 AD (G) F/L',
-        #                   '올 뉴 아반떼 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
 
     def prep_res_hx(self):
         # Make reservation history dataset
@@ -77,14 +75,16 @@ class DataPrep(object):
         # Data preprocessing: by model
         self._prep_by_group(df=res_re, group='model', time='re')
 
-    def _drop_col_res_recent(self, df: pd.DataFrame):
+    @staticmethod
+    def _drop_col_res_recent(df: pd.DataFrame):
         drop_cols = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee', 'res_model', 'car_grd',
                      'rent_period_day', 'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm',
                      'sale_purpose', 'applyed_discount', 'member_grd', 'sale_purpose', 'car_kind']
 
         return df.drop(columns=drop_cols, errors='ignore')
 
-    def _rename_col_res_recent(self, df: pd.DataFrame):
+    @staticmethod
+    def _rename_col_res_recent(df: pd.DataFrame):
         rename_cols = {
             '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
             '고객구분': 'cust_kind', '고객구분명': 'cust_kind_nm', '총 청구액(VAT포함)': 'tot_fee',
@@ -109,11 +109,19 @@ class DataPrep(object):
         data_path = os.path.join('..', 'input', 'capa')
         capa_re_model = pd.read_csv(os.path.join(data_path, 'capa_curr_model.csv'), delimiter='\t',
                                     dtype={'date': str, 'model': str, 'capa': int})
+        capa_re_unavail_model = pd.read_csv(os.path.join(data_path, 'capa_unavail_model.csv'), delimiter='\t')
+        capa_re_model = self._conv_mon_to_day(df=capa_re_model, end_day='28')
+        capa_re_model = self._apply_unavail_capa(capa=capa_re_model, capa_unavail=capa_re_unavail_model)
+
         self.capa_re_model = {(month, model): capa for month, model, capa in zip(capa_re_model['date'],
                                                                                  capa_re_model['model'],
                                                                                  capa_re_model['capa'])}
         capa_re_car = pd.read_csv(os.path.join(data_path, 'capa_curr_car.csv'), delimiter='\t',
-                                    dtype={'date': str, 'model': str, 'capa': int})
+                                  dtype={'date': str, 'model': str, 'capa': int})
+        capa_re_unavail_car = pd.read_csv(os.path.join(data_path, 'capa_unavail_car.csv'), delimiter='\t')
+        capa_re_car = self._conv_mon_to_day(df=capa_re_car, end_day='28')
+        capa_re_car = self._apply_unavail_capa(capa=capa_re_car, capa_unavail=capa_re_unavail_car)
+
         self.capa_re_car = {(month, model): capa for month, model, capa in zip(capa_re_car['date'],
                                                                                capa_re_car['model'],
                                                                                capa_re_car['capa'])}
@@ -130,6 +138,28 @@ class DataPrep(object):
                      '구매목적': str, '생성일': str, '차종': str}
 
         return pd.read_csv(data_path, delimiter='\t', dtype=data_type)
+
+    @staticmethod
+    def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
+        months = np.sort(df['date'].unique())
+        days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
+        model_unique = df[['model', 'capa']].drop_duplicates()
+
+        df_days = pd.DataFrame()
+        for model, capa in zip(model_unique['model'], model_unique['capa']):
+            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
+            df_days = pd.concat([df_days, temp], axis=0)
+
+        return df_days
+
+    @staticmethod
+    def _apply_unavail_capa(capa: pd.DataFrame, capa_unavail: pd.DataFrame):
+        capa_unavail['date'] = pd.to_datetime(capa_unavail['date'], format='%Y%m%d')
+        capa_new = pd.merge(capa, capa_unavail, how='left', on=['date', 'model'], left_index=True, right_index=False)
+        capa_new = capa_new.fillna(0)
+        capa_new['capa'] = capa_new['capa'] - capa_new['unavail']
+
+        return capa_new
 
     def _prep_by_group(self, df: pd.DataFrame, group: str, time: str):
         # Group by
@@ -216,10 +246,11 @@ class DataPrep(object):
         self._save_model(type_data=disc_util_inc_grp, type_name='util_inc', group=group, time=time)
         self._save_model(type_data=disc_util_cum_grp, type_name='util_cum', group=group, time=time)
 
-    def _add_lead_time(self, df: pd.DataFrame):
+    @staticmethod
+    def _add_lead_time(df: pd.DataFrame):
         df['lead_time'] = df['rent_day'] - df['res_day']
         df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
-        df['lead_time']= df['lead_time'] * -1
+        df['lead_time'] = df['lead_time'] * -1
 
         return df
 
@@ -227,11 +258,11 @@ class DataPrep(object):
         return self.capa[time][group][(x[0], x[1])]
 
     def _add_capacity(self, util: pd.DataFrame, group: str, time: str):
-        util['month'] = util['rent_day'].dt.strftime('%Y%m')
+        # util['month'] = util['rent_day'].dt.strftime('%Y%m')
         if group == 'car':
-            util['capa'] = util[['month', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
+            util['capa'] = util[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
         elif group == 'model':
-            util['capa'] = util[['month', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
+            util['capa'] = util[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
         return util
 
     @staticmethod
@@ -266,7 +297,7 @@ class DataPrep(object):
             print(f'{model} of {type_name} data is saved.')
 
     @staticmethod
-    def _get_res_util_BAK(df: pd.DataFrame):
+    def _get_res_util_bak(df: pd.DataFrame):
         res_util = []
         for rent_d, rent_t, return_d, return_t, res_day, discount, model in zip(
                 df['rent_day'], df['rent_time'], df['return_day'], df['return_time'],
@@ -321,7 +352,7 @@ class DataPrep(object):
             fst = list(map(int, rent_t.split(':')))
             lst = list(map(int, return_t.split(':')))
             ft = timedelta(hours=fst[0], minutes=fst[1])  # time of rent day
-            lt = timedelta(hours=lst[0]+ 2, minutes=lst[1])  # time of return day
+            lt = timedelta(hours=lst[0] + 2, minutes=lst[1])  # time of return day
 
             f_util = 1
             l_util = 1
@@ -623,18 +654,3 @@ class DataPrep(object):
         res_hx['seasonality'] = res_hx['seasonality'].fillna(0)
 
         return res_hx
-
-    # Current Reservation dataset
-    def _load_data_curr(self, update_date: str):
-        file_path_res = os.path.join(self.load_path, 'reservation', 'res_' + update_date + '.csv')
-        data_type = {'예약경로': int, '예약경로명': str, '계약번호': int, '고객구분': int,
-                     '고객구분명': str, '총 청구액(VAT포함)': str, '예약모델': str, '예약모델명': str,
-                     '차급': str, '대여일': str, '대여시간': str, '반납일': str, '반납시간': str,
-                     '대여기간(일)': int, '대여기간(시간)': int, 'CDW요금': str, '할인유형': str,
-                     '할인유형명': str, '적용할인명': str, '회원등급': str, '구매목적': str,
-                     '생성일': str, '차종': str}
-        res_curr = pd.rea_csv(file_path_res, delimiter='\t', dtype=data_type)
-
-        file_path_capa = os.path.join(self.load_path, 'capa', 'capa_curr.csv')
-        capa_curr = pd.read_csv(file_path_capa, delimiter='\t',
-                                dtype={'date': str, 'model': str, 'capa': int})

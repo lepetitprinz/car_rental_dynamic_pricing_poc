@@ -76,9 +76,14 @@ class DiscRecommend(object):
         # Capacity history of each car model
         load_path = os.path.join('..', 'input', 'capa', 'capa_curr_model.csv')
         capa_re = pd.read_csv(load_path, delimiter='\t', dtype={'date': str, 'model': str, 'capa': int})
-        self.capa_re = {(month, model): capa for month, model, capa in zip(capa_re['date'],
-                                                                           capa_re['model'],
-                                                                           capa_re['capa'])}
+        capa_re_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_model.csv'), delimiter='\t')
+
+        capa_re = self._conv_mon_to_day(df=capa_re, end_day='28')
+        capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_re_unavail)
+
+        self.capa_re = {(date, model): capa for date, model, capa in zip(capa_re['date'],
+                                                                         capa_re['model'],
+                                                                         capa_re['capa'])}
 
         # Seasonality
         load_path = os.path.join('..', 'input', 'seasonality')
@@ -89,6 +94,28 @@ class DiscRecommend(object):
         # Demand change prediction of jeju visitors
         load_path = os.path.join('..', 'result', 'data', 'model_1')
         self.dmd_pred = pd.read_csv(os.path.join(load_path, 'dmd_pred_2012_2102.csv'))
+
+    @staticmethod
+    def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
+        months = np.sort(df['date'].unique())
+        days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
+        model_unique = df[['model', 'capa']].drop_duplicates()
+
+        df_days = pd.DataFrame()
+        for model, capa in zip(model_unique['model'], model_unique['capa']):
+            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
+            df_days = pd.concat([df_days, temp], axis=0)
+
+        return df_days
+
+    @staticmethod
+    def _apply_unavail_capa(capa: pd.DataFrame, capa_unavail: pd.DataFrame):
+        capa_unavail['date'] = pd.to_datetime(capa_unavail['date'], format='%Y%m%d')
+        capa_new = pd.merge(capa, capa_unavail, how='left', on=['date', 'model'], left_index=True, right_index=False)
+        capa_new = capa_new.fillna(0)
+        capa_new['capa'] = capa_new['capa'] - capa_new['unavail']
+
+        return capa_new
 
     def _load_data(self, pred_day: str):
         load_path = os.path.join('..', 'result', 'data', 'prediction')
@@ -220,9 +247,9 @@ class DiscRecommend(object):
         return rec_input
 
     def _add_feature(self, input_dict: dict, pred_day: str):
-        pred_mon = pred_day.split('-')[0] + pred_day.split('-')[1]
+        pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
         for model, df in input_dict.items():
-            df['avail_capa'] = self.capa_re[(pred_mon, self.model_map[model])] - df['curr_util_time']
+            df['avail_capa'] = self.capa_re[(pred_datetime, self.model_map[model])] - df['curr_util_time']
 
         return input_dict
 

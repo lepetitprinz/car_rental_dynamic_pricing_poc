@@ -4,7 +4,6 @@ import pickle
 import datetime as dt
 from itertools import product
 
-import numpy as np
 import pandas as pd
 
 from sklearn.metrics import mean_squared_error
@@ -85,16 +84,16 @@ class TimeSeries(object):
 
         pred_dom = self.model[list(best_params['dom'].keys())[0]](data=jeju_dom,
                                                                   config=list(best_params['dom'].values())[0],
-                                                                  pred_step=pred_step+1)
+                                                                  pred_step=pred_step + 1)
         pred_for = self.model[list(best_params['for'].keys())[0]](data=jeju_for,
                                                                   config=list(best_params['for'].values())[0],
-                                                                  pred_step=pred_step+1)
+                                                                  pred_step=pred_step + 1)
         pred_tot = pred_dom + pred_for
 
         # Compare
         visit_19_12 = data.loc[dt.datetime(2019, 12, 1):dt.datetime(2019, 12, 31)]['total']
-        visit_20_01 = data.loc[dt.datetime(2020,1,1):dt.datetime(2020,1,31)]['total']
-        visit_20_02 = data.loc[dt.datetime(2020,2,1):dt.datetime(2020,2,28)]['total']
+        visit_20_01 = data.loc[dt.datetime(2020, 1, 1):dt.datetime(2020, 1, 31)]['total']
+        visit_20_02 = data.loc[dt.datetime(2020, 2, 1):dt.datetime(2020, 2, 28)]['total']
 
         pred_20_12 = pred_tot.loc[dt.datetime(2020, 12, 1):dt.datetime(2020, 12, 31)]
         pred_21_01 = pred_tot.loc[dt.datetime(2021, 1, 1):dt.datetime(2021, 1, 31)]
@@ -188,7 +187,6 @@ class TimeSeries(object):
     def tune_hyper_parameter(self, model: str, data: pd.DataFrame, n_test: int, param_grid: dict):
         err_list = list()
         for params in list(product(*list(param_grid.values()))):
-            config = dict()
             config = {key: val for key, val in zip(list(param_grid.keys()), params)}
             err = self.validate_walk_forward(model=model, data=data, n_test=n_test, config=config)
             err_list.append((list(config.items()), round(err, 2)))

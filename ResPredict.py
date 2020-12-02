@@ -40,10 +40,10 @@ class ResPredict(object):
         # Prediction variables
         # Initial values of variables
         self.res_update_day = res_update_day
-        self.day_to_res_cnt_init: dict = {}
-        self.day_to_season: dict = {}
-        self.day_to_disc_init: dict = {}
-        self.mon_to_capa_init: dict = {}
+        self.res_cnt_re: dict = {}
+        self.season_re: dict = {}
+        self.disc_re: dict = {}
+        self.capa_re: dict = {}
         self.avg_unavail_capa = 2
 
         # Lead time
@@ -95,7 +95,7 @@ class ResPredict(object):
         m2_io = self._split_input_target_all()
 
         # Set initial variables
-        self._set_pred_init_variables()
+        self._set_recent_dataset()
 
         # Load best hyper-parameters
         extr_bests = self._load_best_params(regr='extr')
@@ -113,15 +113,14 @@ class ResPredict(object):
     def _pred(self, pred_day: str, fitted_model: dict):
         # Get season value and initial discount rate
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
-        season = self.day_to_season[pred_datetime]
-        init_disc = self.day_to_disc_init[pred_datetime]
+        season = self.season_re[pred_datetime]
+        init_disc = self.disc_re[pred_datetime]
 
         # Set initial capacity of model
-        pred_mon = pred_day.split('-')[0] + pred_day.split('-')[1]
-        init_capa = {'av': self.mon_to_capa_init[(pred_mon, 'AVANTE')] - self.avg_unavail_capa,
-                     'k3': self.mon_to_capa_init[(pred_mon, 'K3')] - self.avg_unavail_capa,
-                     'vl': self.mon_to_capa_init[(pred_mon, 'VELOSTER')] - self.avg_unavail_capa,
-                     'su': self.mon_to_capa_init[(pred_mon, 'SOUL')] - self.avg_unavail_capa,}
+        init_capa = {'av': self.capa_re[(pred_datetime, 'AVANTE')] - self.avg_unavail_capa,
+                     'k3': self.capa_re[(pred_datetime, 'K3')] - self.avg_unavail_capa,
+                     'vl': self.capa_re[(pred_datetime, 'VELOSTER')] - self.avg_unavail_capa,
+                     'su': self.capa_re[(pred_datetime, 'SOUL')] - self.avg_unavail_capa}
 
         # Make initial values dataframe
         pred_input = self._get_pred_input(season=season, init_disc=init_disc, pred_day=pred_day)
@@ -153,7 +152,7 @@ class ResPredict(object):
                                                        'discount': init_disc})
                 else:
                     input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec,
-                                                       'res_cnt': self.day_to_res_cnt_init[pred_day].get(model, 0)})
+                                                       'res_cnt': self.res_cnt_re[pred_day].get(model, 0)})
             pred_input[data_type] = input_model
 
         return pred_input
@@ -294,17 +293,17 @@ class ResPredict(object):
     ##################################
     # 4. Prediction
     ##################################
-    def _set_pred_init_variables(self):
-        self.day_to_res_cnt_init = self._get_init_res_cnt()
-        self.day_to_season = self._get_seasonal_map()
-        self.day_to_disc_init = self._get_init_disc_map()
-        self.mon_to_capa_init = self._get_init_capa()
+    def _set_recent_dataset(self):
+        self.res_cnt_re = self._get_res_cnt_re()
+        self.season_re = self._get_seasonal_map()
+        self.disc_re = self._get_disc_re()
+        self.capa_re = self._get_capa_re()
         self.lt, self.lt_vec, self.lt_to_lt_vec = self._get_lead_time()
 
-    def _get_init_res_cnt(self):
+    def _get_res_cnt_re(self):
         # Load recent reservation dataset
         load_path = os.path.join('..', 'input', 'reservation')
-        res_curr = pd.read_csv(os.path.join(load_path, 'res_' + self.res_update_day + '.csv'), delimiter='\t')
+        res_re = pd.read_csv(os.path.join(load_path, 'res_' + self.res_update_day + '.csv'), delimiter='\t')
 
         res_remap_cols = {
             '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
@@ -315,19 +314,19 @@ class ResPredict(object):
             'CDW요금': 'cdw_fee', '할인유형': 'discount_type', '할인유형명': 'discount_type_nm',
             '적용할인명': 'applyed_discount', '적용할인율(%)': 'discount_rate', '회원등급': 'member_grd',
             '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
-        res_curr = res_curr.rename(columns=res_remap_cols)
+        res_re = res_re.rename(columns=res_remap_cols)
 
         res_drop_col = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee',
                         'res_model', 'car_grd', 'rent_time', 'return_day', 'return_time', 'rent_period_day',
                         'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm', 'sale_purpose',
                         'applyed_discount', 'discount_rate', 'member_grd', 'sale_purpose', 'car_kind']
-        res_curr = res_curr.drop(columns=res_drop_col, errors='ignore')
+        res_re = res_re.drop(columns=res_drop_col, errors='ignore')
 
-        res_curr['rent_day'] = pd.to_datetime(res_curr['rent_day'], format='%Y-%m-%d')
-        res_curr['res_day'] = pd.to_datetime(res_curr['res_day'], format='%Y-%m-%d')
+        res_re['rent_day'] = pd.to_datetime(res_re['rent_day'], format='%Y-%m-%d')
+        res_re['res_day'] = pd.to_datetime(res_re['res_day'], format='%Y-%m-%d')
 
         # filter only 1.6 grade car group
-        res_curr = res_curr[res_curr['res_model_nm'].isin([
+        res_re = res_re[res_re['res_model_nm'].isin([
             'ALL NEW K3 (G)',
             '아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
             '더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)'
@@ -336,18 +335,18 @@ class ResPredict(object):
         # Car Model group
         # SOUL 모델은 VELOSTER 모델에 포함해서 분석 (실적 데이터가 적음)
         conditions = [
-            res_curr['res_model_nm'].isin(['ALL NEW K3 (G)']),
-            res_curr['res_model_nm'].isin(['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']),
-            res_curr['res_model_nm'].isin(['더 올 뉴 벨로스터 (G)']),
-            res_curr['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)'])
+            res_re['res_model_nm'].isin(['ALL NEW K3 (G)']),
+            res_re['res_model_nm'].isin(['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']),
+            res_re['res_model_nm'].isin(['더 올 뉴 벨로스터 (G)']),
+            res_re['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)'])
         ]
         values = ['k3', 'av', 'vl', 'su']
-        res_curr['res_model_grp'] = np.select(conditions, values)
+        res_re['res_model_grp'] = np.select(conditions, values)
 
-        res_curr = res_curr.drop(columns=['res_model_nm'], errors='ignore')
-        res_curr = res_curr.sort_values(by=['rent_day', 'res_day'])
+        res_re = res_re.drop(columns=['res_model_nm'], errors='ignore')
+        res_re = res_re.sort_values(by=['rent_day', 'res_day'])
 
-        res_cnt = res_curr.groupby(by=['rent_day', 'res_model_grp']).count()['res_num']
+        res_cnt = res_re.groupby(by=['rent_day', 'res_model_grp']).count()['res_num']
         res_cnt = res_cnt.reset_index(level=(0, 1))
 
         res_curr_dict = defaultdict(dict)
@@ -368,7 +367,7 @@ class ResPredict(object):
         return day_to_season
 
     @staticmethod
-    def _get_init_disc_map():
+    def _get_disc_re():
         # Initial discount rate for each season
         load_path = os.path.join('..', 'input', 'discount')
         dscnt_init = pd.read_csv(os.path.join(load_path, 'discount_init.csv'), delimiter='\t')
@@ -378,17 +377,43 @@ class ResPredict(object):
 
         return day_to_init_discount
 
-    @staticmethod
-    def _get_init_capa():
+    def _get_capa_re(self):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
         capa_init = pd.read_csv(os.path.join(load_path, 'capa_curr_model.csv'), delimiter='\t',
                                 dtype={'date': str, 'model': str, 'capa': int})
-        day_to_capa_init = {(date, model): capa for date, model, capa in zip(capa_init['date'],
-                                                                             capa_init['model'],
-                                                                             capa_init['capa'])}
+        capa_init_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_model.csv'), delimiter='\t')
 
-        return day_to_capa_init
+        capa_init = self._conv_mon_to_day(df=capa_init, end_day='28')
+        capa_init = self._apply_unavail_capa(capa=capa_init, capa_unavail=capa_init_unavail)
+
+        capa_init_dict = {(date, model): capa for date, model, capa in zip(capa_init['date'],
+                                                                           capa_init['model'],
+                                                                           capa_init['capa'])}
+
+        return capa_init_dict
+
+    @staticmethod
+    def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
+        months = np.sort(df['date'].unique())
+        days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
+        model_unique = df[['model', 'capa']].drop_duplicates()
+
+        df_days = pd.DataFrame()
+        for model, capa in zip(model_unique['model'], model_unique['capa']):
+            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
+            df_days = pd.concat([df_days, temp], axis=0)
+
+        return df_days
+
+    @staticmethod
+    def _apply_unavail_capa(capa: pd.DataFrame, capa_unavail: pd.DataFrame):
+        capa_unavail['date'] = pd.to_datetime(capa_unavail['date'], format='%Y%m%d')
+        capa_new = pd.merge(capa, capa_unavail, how='left', on=['date', 'model'], left_index=True, right_index=False)
+        capa_new = capa_new.fillna(0)
+        capa_new['capa'] = capa_new['capa'] - capa_new['unavail']
+
+        return capa_new
 
     @staticmethod
     def _get_lead_time():
