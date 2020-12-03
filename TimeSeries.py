@@ -19,9 +19,9 @@ class TimeSeries(object):
     Jeju visitors prediction model (Time series model)
     """
 
-    def __init__(self, visitor: pd.DataFrame, start_date: int, end_date: int):
+    def __init__(self, start_date: int, end_date: int):
         self.save_path = os.path.join('..', 'result', 'model', 'time_series')
-        self.visitor = visitor
+        self.visitor: pd.DataFrame = pd.DataFrame()
         self.start_date = start_date
         self.end_date = end_date
         self.model: dict = {'ar': self.model_ar,
@@ -32,6 +32,8 @@ class TimeSeries(object):
         return self.visitor[(self.visitor['date'] >= self.start_date) & (self.visitor['date'] <= self.end_date)]
 
     def train(self, n_test: int, test_models: list, param_grids: dict):
+        self.visitor = pd.read_csv(os.path.join('..', 'input', 'jeju_visit_daily.csv'), delimiter='\t')
+
         data = self._filter_periods()
 
         # String date convert to datetime

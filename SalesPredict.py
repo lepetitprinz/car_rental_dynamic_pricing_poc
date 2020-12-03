@@ -8,6 +8,8 @@ from dateutil.relativedelta import relativedelta
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import ExtraTreesRegressor
@@ -103,17 +105,24 @@ class SalesPredict(object):
         res_hx = res_hx[res_hx['rent_datetime'] >= dt.datetime(2018, 1, 1)]
         res_hx = res_hx.reset_index(drop=True)
 
+        res_hx = res_hx.rename(columns={'car_rent_fee': 'rent_fee'})
+
         # Group by season & model
-        res_hx_grp = res_hx.groupby(by=['seasonality', 'res_model']).mean()['rent_period_hours']
+        # res_hx_grp = res_hx.groupby(by=['seasonality', 'res_model']).mean()['rent_period_hours']
+        res_hx_grp = res_hx.groupby(by=['seasonality', 'res_model']).mean()
+        res_hx_grp['rent_fee_org'] = res_hx_grp['rent_fee'] / (1 - res_hx_grp['discount'] / 100)
         res_hx_grp = res_hx_grp.reset_index(level=(0, 1))
 
-        res_hx_grp['rent_period_hours'] = np.round(res_hx_grp['rent_period_hours'].to_numpy(), 0)
+        # res_hx_grp['rent_period_hours'] = np.round(res_hx_grp['rent_period_hours'].to_numpy(), 0)
+
+        res_hx_grp['rent_fee_org'] = np.round(res_hx_grp['rent_fee_org'].to_numpy(), 0)
+        res_hx_grp['cdw_fee'] = np.round(res_hx_grp['cdw_fee'].to_numpy(), 0)
 
         # Calculate sales by each model
-        res_hx_grp = self._calc_exp_sales(df=res_hx_grp)
+        # res_hx_grp = self._calc_exp_sales(df=res_hx_grp)
 
-        res_hx_grp = res_hx_grp.drop(columns=['rent_day', 'rent_hour', 'fee_group'],
-                                     errors=False)
+        res_hx_grp = res_hx_grp.drop(columns=['rent_fee', 'tot_fee'],
+                                     errors='ignore')
 
         res_hx_grp.to_csv(os.path.join('..', 'result', 'data', 'sales_prediction', 'sales_per_res.csv'),
                           index=False, encoding='euc-kr')
@@ -255,10 +264,10 @@ class SalesPredict(object):
         sales_per_res['res_model'] = sales_per_res['res_model'].apply(lambda x: self.model_type_map_rev[x])
         for season, model, fee, cdw in zip(sales_per_res['seasonality'],
                                            sales_per_res['res_model'],
-                                           sales_per_res['rent_fee'],
-                                           sales_per_res['rent_cdw']):
-            rent_fee[season].update({model: fee})
-            rent_cdw[season].update({model: cdw})
+                                           sales_per_res['rent_fee_org'],
+                                           sales_per_res['cdw_fee']):
+            rent_fee[season].update({model: int(fee)})
+            rent_cdw[season].update({model: int(cdw)})
 
         self.rent_fee_hx = rent_fee
         self.rent_cdw_hx = rent_cdw
@@ -477,6 +486,10 @@ class SalesPredict(object):
 
         res_re['rent_day'] = pd.to_datetime(res_re['rent_day'], format='%Y-%m-%d')
         res_re['res_day'] = pd.to_datetime(res_re['res_day'], format='%Y-%m-%d')
+
+        # Filter datetime
+        res_re = res_re[res_re['rent_day'] <= dt.datetime(2021, 2, 28)]
+        res_util = res_util[res_util['rent_day'] <= dt.datetime(2021, 2, 28)]
 
         return self._group(res_cnt=res_re, res_util=res_util)
 
@@ -794,7 +807,7 @@ class SalesPredict(object):
         apply_datetime = dt.datetime(*list(map(int, apply_day.split('/'))))
         season = self.day_to_season[pred_datetime]
         fee_per_res = self.rent_fee_hx[season]  # Reservation fee of history dataset by each model
-        cdw_per_res = self.rent_fee_hx[season]
+        cdw_per_res = self.rent_cdw_hx[season]
         init_disc = self.disc_re[pred_datetime]
         init_res = self.res_cnt_init[pred_day]
         init_util = self.res_util_init[pred_day]
@@ -827,7 +840,42 @@ class SalesPredict(object):
         self._save_result(result=pred_sales_exp, pred_day=pred_day, apply_day=apply_day, kinds='exp')
         self._save_result(result=pred_sales_rec, pred_day=pred_day, apply_day=apply_day, kinds='rec')
 
+        self._draw_trend_graph(result=pred_sales_exp, pred_day=pred_day, apply_day=apply_day, kinds='exp')
+        self._draw_trend_graph(result=pred_sales_rec, pred_day=pred_day, apply_day=apply_day, kinds='rec')
+
         print(f'Prediction result on {pred_day} is saved')
+
+    def _draw_trend_graph(self, result: dict, pred_day: str, apply_day: str,  kinds: str):
+        pred_day_str = ''.join(pred_day.split('-'))
+        apply_day_str = ''.join(apply_day.split('/'))
+
+        fig_size = (8, 5)
+        for model_key, model_val in result.items():
+            # Figure setting
+            fig, axes = plt.subplots(3, 1)
+            cor_line = '#875f42'
+            cor_exp_line = 'lightcoral'
+            save_path = os.path.join(self.path_sales_per_res, apply_day_str, kinds, pred_day_str)
+
+            exp_sales = model_val['exp_cum_sales'].iloc[-1]
+            model_val['cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                       color=cor_line, label='Reservation Count', ax=axes[0])
+            model_val['exp_cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                       color=cor_exp_line, label='Exp. Reservation Count', ax=axes[0])
+            model_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                       color=cor_line, label='Utilization Rate', ax=axes[1])
+            model_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                       color=cor_exp_line, label='Exp. Utilization Rate', ax=axes[1])
+            model_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                       color=cor_line, label='Discount Rate', ax=axes[2])
+            model_val['exp_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                       color=cor_exp_line, label='Exp. Discount Rate', ax=axes[2])
+            if kinds == 'rec':
+                model_val['rec_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                                color="teal", label='Rec. Discount Rate', ax=axes[2])
+            # axes.legend()
+            plt.title(f'Exp. Sales: {exp_sales}')
+            plt.savefig(os.path.join(save_path, 'sales_pred_' + model_key + '.png'))
 
     @staticmethod
     def _rearr_column(df: dict, pred_day: str, apply_day: str, kinds: str):
