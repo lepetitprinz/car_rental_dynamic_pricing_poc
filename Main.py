@@ -92,11 +92,17 @@ def model_sales_pred(start_date: str, end_date: str, apply_day: str, res_update_
     # disc_rec_lead_time.rec(pred_days=pred_days, apply_day=apply_day)
 
 
-def data_post_processing(res_update_day: str, cancel_update_day: str):
-    post_proc = DataPostProcessing(res_update_day=res_update_day,
-                                   cancel_update_day=cancel_update_day)
-    post_proc.data_post_process()
-
+def data_post_processing(update_day_before: str, update_day_after: str, update_day_cancel: str,
+                         res_complete_day: str, disc_rec_day: str,
+                         start_day: str, end_day: str):
+    post_proc = DataPostProcessing(update_day_before=update_day_before,
+                                   update_day_after=update_day_after,
+                                   update_day_cancel=update_day_cancel,
+                                   res_complete_day=res_complete_day,
+                                   disc_rec_day=disc_rec_day,
+                                   start_day=start_day,
+                                   end_day=end_day)
+    post_proc.post_process()
 
 ##########################################
 # Moin
@@ -112,7 +118,14 @@ def main():
     end_date = '2021/02/28'
     apply_day = '2020/12/07'
 
-    cancel_update_day = '201203'
+    # Data Post Processing
+    update_day_before = '201126'
+    update_day_after = '201204'
+    update_day_cancel = '201203'
+    res_complete_day = '201203'    # 실적
+    disc_rec_day = '20201201'
+    start_day = '20201201'
+    end_day = '20210228'
 
     # Data Preprocessing
     # data_preprocessing(update_day=res_update_day)
@@ -123,15 +136,15 @@ def main():
     #         n_test=n_test)
 
     # Model 2
-    model_2(start_date=start_date,
-            end_date=end_date,
-            res_update_day=res_update_day)
+    # model_2(start_date=start_date,
+    #         end_date=end_date,
+    #         res_update_day=res_update_day)
 
     # Model 3
-    model_3(start_date=start_date,
-            end_date=end_date,
-            apply_day=apply_day,
-            res_update_day=res_update_day)
+    # model_3(start_date=start_date,
+    #         end_date=end_date,
+    #         apply_day=apply_day,
+    #         res_update_day=res_update_day)
 
     # Sales Prediction
     # model_sales_pred(start_date=start_date,
@@ -140,8 +153,13 @@ def main():
     #                  res_update_day=res_update_day)
 
     # Data Post Processing
-    # data_post_processing(res_update_day=res_update_day,
-    #                      cancel_update_day=cancel_update_day)
+    data_post_processing(update_day_before=update_day_before,
+                         update_day_after=update_day_after,
+                         update_day_cancel=update_day_cancel,
+                         res_complete_day=res_complete_day,
+                         disc_rec_day=disc_rec_day,
+                         start_day=start_day,
+                         end_day=end_day)
 
 
 # Run main function
