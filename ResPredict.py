@@ -19,23 +19,13 @@ class ResPredict(object):
         self.random_state = 2020
         self.test_size = 0.2
         self.data_type: list = ['cnt', 'disc', 'util']
+        self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
         self.model_type: list = ['av', 'k3', 'vl', 'su']
+        self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
 
         # Path of data & model
-        self.path_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'model')
+        self.path_data_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx')
         self.path_model = os.path.join('..', 'result', 'model', 'model_2')
-
-        # Reservation count dataset
-        self.res_cnt_av: pd.DataFrame = pd.DataFrame()
-        self.res_cnt_k3: pd.DataFrame = pd.DataFrame()
-        self.res_cnt_vl: pd.DataFrame = pd.DataFrame()
-        self.res_cnt_su: pd.DataFrame = pd.DataFrame()
-
-        # Reservation utilization dataset
-        self.res_util_av: pd.DataFrame = pd.DataFrame()
-        self.res_util_k3: pd.DataFrame = pd.DataFrame()
-        self.res_util_vl: pd.DataFrame = pd.DataFrame()
-        self.res_util_su: pd.DataFrame = pd.DataFrame()
 
         # Prediction variables
         # Initial values of variables
@@ -56,12 +46,12 @@ class ResPredict(object):
         self.split_map: dict = dict()
         self.param_grids = dict()
 
-    def train(self):
+    def train(self, model_detail: str):
         # Load dataset
-        self._load_data()
+        self.data_map = self._load_data(model_detail=model_detail)
 
         # Define input and output
-        self.data_map, self.split_map = self._set_split_map()
+        self.split_map = self._set_split_map()
 
         # Split into input and output
         m2_io = self._split_input_target_all()
@@ -84,12 +74,12 @@ class ResPredict(object):
 
         print('Training finished')
 
-    def predict(self, pred_days: list):
+    def predict(self, pred_days: list, model_detail: str):
         # Load dataset
-        self._load_data()
+        self.data_map = self._load_data(model_detail=model_detail)
 
         # Define input and output
-        self.data_map, self.split_map = self._set_split_map()
+        self.split_map = self._set_split_map()
 
         # Split into input and output
         m2_io = self._split_input_target_all()
@@ -110,92 +100,36 @@ class ResPredict(object):
         print("Model 2 Prediction is finished")
         print('')
 
-    def _pred(self, pred_day: str, fitted_model: dict):
-        # Get season value and initial discount rate
-        pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
-        season = self.season_re[pred_datetime]
-        init_disc = self.disc_re[pred_datetime]
-
-        # Set initial capacity of model
-        init_capa = {'av': self.capa_re[(pred_datetime, 'AVANTE')] - self.avg_unavail_capa,
-                     'k3': self.capa_re[(pred_datetime, 'K3')] - self.avg_unavail_capa,
-                     'vl': self.capa_re[(pred_datetime, 'VELOSTER')] - self.avg_unavail_capa,
-                     'su': self.capa_re[(pred_datetime, 'SOUL')] - self.avg_unavail_capa}
-
-        # Make initial values dataframe
-        pred_input = self._get_pred_input(season=season, init_disc=init_disc, pred_day=pred_day)
-
-        pred_result = self._pred_fitted_model(pred_input=pred_input, fitted_model=fitted_model)
-
-        # Map lead time to prediction results
-        lt_to_pred_result = self._get_lt_to_pred_result(pred_result=pred_result)
-
-        result = self._map_rslt_to_lead_time(pred_final=lt_to_pred_result)
-
-        # Result data convert to dataframe
-        result_df = self._conv_to_dataframe(result=result, pred_datetime=pred_datetime,
-                                            init_disc=init_disc, init_capa=init_capa)
-
-        # Save the result dataframe
-        self._save_result(result=result_df, pred_day=pred_day)
-
-        print(f'Prediction result on {pred_day} is saved')
-
-    def _get_pred_input(self, season: int, init_disc: int, pred_day: str):
-        pred_input = {}
-        for data_type in self.data_type:
-            input_model = {}
-            for model in self.model_type:
-                if data_type in ['cnt', 'util']:
-                    input_model[model] = pd.DataFrame({'season': season,
-                                                       'lead_time': self.lt_vec,
-                                                       'discount': init_disc})
-                else:
-                    input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec,
-                                                       'res_cnt': self.res_cnt_re[pred_day].get(model, 0)})
-            pred_input[data_type] = input_model
-
-        return pred_input
-
     ####################################
     # 2. Data & Variable Initialization
     ####################################
-    def _load_data(self):
-        # Load Reservation Count dataset
-        self.res_cnt_av = pd.read_csv(os.path.join(self.path_data, 'cnt_cum', 'cnt_cum_av.csv'))
-        self.res_cnt_k3 = pd.read_csv(os.path.join(self.path_data, 'cnt_cum', 'cnt_cum_k3.csv'))
-        self.res_cnt_vl = pd.read_csv(os.path.join(self.path_data, 'cnt_cum', 'cnt_cum_vl.csv'))
-        self.res_cnt_su = pd.read_csv(os.path.join(self.path_data, 'cnt_cum', 'cnt_cum_su.csv'))
+    def _load_data(self, model_detail: str):
+        data_map = defaultdict(dict)
+        if model_detail == 'model':
+            for data_type in self.data_type:        # cnt / disc / util
+                for model in self.model_type:       # av / k3 / su / vl
+                    data_type_name = self.data_type_map[data_type]
+                    data_map[data_type].update({model: pd.read_csv(os.path.join(self.path_data_hx, model_detail,
+                                                data_type_name, data_type_name + '_' + model + '.csv'))})
+        elif model_detail == 'car':
+            for data_type in self.data_type:    # cnt / disc / util
+                for model in self.car_type:     # av_ad / av_new / k3 / soul / vlst
+                    data_type_name = self.data_type_map[data_type]
+                    data_map[data_type].update({model: pd.read_csv(os.path.join(self.path_data_hx, model_detail,
+                                                data_type_name, data_type_name + '_' + model + '.csv'))})
 
-        # Load Reservation Utilization dataset
-        self.res_util_av = pd.read_csv(os.path.join(self.path_data, 'util_cum', 'util_cum_av.csv'))
-        self.res_util_k3 = pd.read_csv(os.path.join(self.path_data, 'util_cum', 'util_cum_k3.csv'))
-        self.res_util_vl = pd.read_csv(os.path.join(self.path_data, 'util_cum', 'util_cum_vl.csv'))
-        self.res_util_su = pd.read_csv(os.path.join(self.path_data, 'util_cum', 'util_cum_su.csv'))
+        return data_map
 
-    def _set_split_map(self):
-        data_map = {'cnt': {'av': self.res_cnt_av,
-                            'k3': self.res_cnt_k3,
-                            'vl': self.res_cnt_vl,
-                            'su': self.res_cnt_su},
-                    'disc': {'av': self.res_cnt_av,
-                             'k3': self.res_cnt_k3,
-                             'vl': self.res_cnt_vl,
-                             'su': self.res_cnt_su},
-                    'util': {'av': self.res_util_av,
-                             'k3': self.res_util_k3,
-                             'vl': self.res_util_vl,
-                             'su': self.res_util_su}}
-
+    @staticmethod
+    def _set_split_map():
         split_map = {'cnt': {'drop': ['cnt_cum'],
                              'target': 'cnt_cum'},
                      'disc': {'drop': ['disc_mean'],
                               'target': 'disc_mean'},
-                     'util': {
-                         'drop': ['util_cum', 'util_rate_cum'],
-                         'target': 'util_rate_cum'}}
+                     'util': {'drop': ['util_cum', 'util_rate_cum'],
+                              'target': 'util_rate_cum'}}
 
-        return data_map, split_map
+        return split_map
 
     ##################################
     # 2. Data Preprcessing
@@ -293,6 +227,53 @@ class ResPredict(object):
     ##################################
     # 4. Prediction
     ##################################
+    def _pred(self, pred_day: str, fitted_model: dict):
+        # Get season value and initial discount rate
+        pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
+        season = self.season_re[pred_datetime]
+        init_disc = self.disc_re[pred_datetime]
+
+        # Set initial capacity of model
+        init_capa = {'av': self.capa_re[(pred_datetime, 'AVANTE')] - self.avg_unavail_capa,
+                     'k3': self.capa_re[(pred_datetime, 'K3')] - self.avg_unavail_capa,
+                     'vl': self.capa_re[(pred_datetime, 'VELOSTER')] - self.avg_unavail_capa,
+                     'su': self.capa_re[(pred_datetime, 'SOUL')] - self.avg_unavail_capa}
+
+        # Make initial values dataframe
+        pred_input = self._get_pred_input(season=season, init_disc=init_disc, pred_day=pred_day)
+
+        pred_result = self._pred_fitted_model(pred_input=pred_input, fitted_model=fitted_model)
+
+        # Map lead time to prediction results
+        lt_to_pred_result = self._get_lt_to_pred_result(pred_result=pred_result)
+
+        result = self._map_rslt_to_lead_time(pred_final=lt_to_pred_result)
+
+        # Result data convert to dataframe
+        result_df = self._conv_to_dataframe(result=result, pred_datetime=pred_datetime,
+                                            init_disc=init_disc, init_capa=init_capa)
+
+        # Save the result dataframe
+        self._save_result(result=result_df, pred_day=pred_day)
+
+        print(f'Prediction result on {pred_day} is saved')
+
+    def _get_pred_input(self, season: int, init_disc: int, pred_day: str):
+        pred_input = {}
+        for data_type in self.data_type:
+            input_model = {}
+            for model in self.model_type:
+                if data_type in ['cnt', 'util']:
+                    input_model[model] = pd.DataFrame({'season': season,
+                                                       'lead_time': self.lt_vec,
+                                                       'discount': init_disc})
+                else:
+                    input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec,
+                                                       'res_cnt': self.res_cnt_re[pred_day].get(model, 0)})
+            pred_input[data_type] = input_model
+
+        return pred_input
+
     def _set_recent_dataset(self):
         self.res_cnt_re = self._get_res_cnt_re()
         self.season_re = self._get_seasonal_map()

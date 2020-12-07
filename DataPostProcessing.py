@@ -1,4 +1,5 @@
 import os
+import pickle
 import datetime as dt
 from datetime import timedelta
 from collections import defaultdict
@@ -6,13 +7,19 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 
+from sklearn.ensemble import ExtraTreesRegressor
+
 
 class DataPostProcessing(object):
+
+    REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
+                  "extr": ExtraTreesRegressor}
 
     def __init__(self, update_day_before: str, update_day_after: str, update_day_cancel: str,
                  res_complete_day: str, disc_rec_day: str, start_day: str, end_day: str):
         # Path
         self.path_hx_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
+        self.path_model = os.path.join('..', 'result', 'model', 'model_2')
         # Date
         self.update_day_before = update_day_before
         self.update_day_after = update_day_after
@@ -27,6 +34,16 @@ class DataPostProcessing(object):
         self.capa_re: dict = {}
         self.disc_re: dict = {}
         self.disc_rec: dict = {}
+        self.season_re: dict = {}
+        # data type
+        self.data_type: list = ['cnt', 'disc', 'util']
+        self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
+        self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
+
+        # inintialize mapping dictionary
+        self.data_hx_map: dict = dict()
+        self.split_map: dict = dict()
+
         # car grade
         self.grade_1_6 = ['ALL NEW K3 (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
                           '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
@@ -51,6 +68,7 @@ class DataPostProcessing(object):
         self.capa_re = self._get_capa_re()
         self.disc_re = self._get_disc_re()
         self.disc_rec = self._get_disc_rec()
+        self.season_re = self._get_season_re()
 
         # Change data type
         res_before['rent_day'] = pd.to_datetime(res_before['rent_day'], format='%Y-%m-%d')
@@ -154,28 +172,65 @@ class DataPostProcessing(object):
         # Fill NA
         result = result.fillna(0)
 
-        # Dict
+        # Calculate season and lead time
         result_dict = {}
         date_range = pd.date_range(start=self.start_day, end=self.end_day, freq='D')
+        season = [self.season_re[date] for date in date_range]
+        lt_af = list(map(int, (date_range - start_day_dt) / np.timedelta64(1, 'D')))
+        lt_bf = [lt + 7 for lt in lt_af]
+        lt_to_lt_vec = {-1 * i: (((i // 7) + 24) * -1 if i > 28 else i * -1) for i in range(0, lt_bf[-1] + 1, 1)}
+        lt_af_vec = [lt_to_lt_vec[lt * -1] for lt in lt_af]
+        lt_bf_vec = [lt_to_lt_vec[lt * -1] for lt in lt_bf]
+
         rearr = ['rent_day',
-                 'cnt_af', 'cnt_exp', 'cnt_chg',
-                 'util_af', 'util_exp', 'util_chg',
-                 'util_rate_af', 'util_rate_exp', 'util_rate_chg',
-                 'disc_standard', 'disc_rec', 'disc_bf', 'disc_af', 'canceled']
-        for model in self.model_type:
-            date_df = pd.DataFrame({'rent_day': date_range})
+                 'cnt_bf', 'cnt_af', 'cnt_chg', 'cnt_exp_bf', 'cnt_exp_af', 'cnt_exp_chg', 'cnt_chg_diff',
+                 'disc_applied', 'disc_rec', 'disc_diff', 'disc_bf', 'disc_af',
+                 'util_af', 'util_exp_af', 'util_diff',
+                 'canceled']
+
+        # Load best hyper-parameters
+        self.data_hx_map = self._load_data_hx()
+
+        # Define input and output
+        self.split_map = self._set_split_map()
+
+        # Split into input and output
+        io = self._split_input_target_all()
+
+        # Load best hyper-parameters
+        extr_bests = self._load_best_params(regr='extr')
+
+        # fit the model
+        fitted = self._fit_model(dataset=io, regr='extr', params=extr_bests)
+
+        for model in self.model_type:   # av_ad / av_new / k3 / soul / vlst
+            date_df = pd.DataFrame({'rent_day': date_range, 'season': season, 'lead_time': lt_af_vec})
             temp = result[result['model'] == model].sort_values(by='rent_day')
             temp = temp.reset_index(drop=True)
             temp = pd.merge(date_df, temp, how='left', on=['rent_day'], left_index=True, right_index=False)
             temp = temp.fillna(0)
-            temp['disc_standard'] = [self.disc_re[rent_day] for rent_day in temp['rent_day']]
-            temp['cnt_exp'] = [self.disc_rec[self.model_grp[model]][rent_day][0] for rent_day in temp['rent_day']]
-            temp['cnt_chg'] = temp['cnt_af'] - temp['cnt_exp']
-            temp['util_exp'] = [self.disc_rec[self.model_grp[model]][rent_day][1] for rent_day in temp['rent_day']]
-            temp['util_chg'] = temp['util_af'] - temp['util_exp']
-            temp['util_rate_exp'] = [self.disc_rec[self.model_grp[model]][rent_day][2] for rent_day in temp['rent_day']]
-            temp['util_rate_chg'] = temp['util_rate_af'] - temp['util_rate_exp']
+
+            temp['disc_applied'] = [self.disc_re[rent_day] for rent_day in temp['rent_day']]
             temp['disc_rec'] = [self.disc_rec[self.model_grp[model]][rent_day][3] for rent_day in temp['rent_day']]
+
+            temp['cnt_chg'] = temp['cnt_af'] - temp['cnt_bf']
+            temp['disc_diff'] = temp['disc_applied'] - temp['disc_rec']
+
+            fitted_model = fitted[model]
+            pred_input_bf = self._get_pred_input(season=season, lead_time=lt_bf_vec,
+                                                 cnt=temp['cnt_bf'].to_numpy(), disc=temp['disc_applied'].to_numpy())
+            pred_input_af = self._get_pred_input(season=season, lead_time=lt_af_vec,
+                                                 cnt=temp['cnt_af'].to_numpy(), disc=temp['disc_applied'].to_numpy())
+            for type_key, type_val in fitted_model.items():
+                temp[type_key + '_exp_bf'] = np.round(type_val.predict(pred_input_bf[type_key]), 1)
+                temp[type_key + '_exp_af'] = np.round(type_val.predict(pred_input_af[type_key]), 1)
+
+            # Calculate the difference : count / utilization / utilization rate
+            temp['cnt_exp_chg'] = temp['cnt_exp_af'] - temp['cnt_exp_bf']
+            temp['util_diff'] = temp['util_af'] - temp['util_exp_af']
+            temp['cnt_chg_diff'] = temp['cnt_chg'] - temp['cnt_exp_chg']
+
+            # Re-arrange columns
             temp = temp[rearr]
             result_dict[model] = temp
 
@@ -187,6 +242,80 @@ class DataPostProcessing(object):
             df.T.to_csv(os.path.join(save_path, 'weekly_report_' + model + '.csv'), header=False)
 
         print("")
+
+    def _get_pred_input(self, season, lead_time, cnt, disc):
+        pred_input = {}
+        for data_type in self.data_type:
+            if data_type == 'disc':
+                pred_input[data_type] = np.array([season, lead_time, cnt]).T
+            else:
+                pred_input[data_type] = np.array([season, lead_time, disc]).T
+
+        return pred_input
+
+    def _load_data_hx(self):
+        data_hx_map = defaultdict(dict)
+        for data_type in self.data_type:    # cnt / disc / util
+            for model in self.car_type:     # av_ad / av_new / k3 / soul / vlst
+                data_type_name = self.data_type_map[data_type]
+                data_hx_map[data_type].update({model: pd.read_csv(os.path.join(self.path_hx_data,
+                                               data_type_name, data_type_name + '_' + model + '.csv'))})
+
+        return data_hx_map
+
+    @staticmethod
+    def _set_split_map():
+        split_map = {'cnt': {'drop': ['cnt_cum'],
+                             'target': 'cnt_cum'},
+                     'disc': {'drop': ['disc_mean'],
+                              'target': 'disc_mean'},
+                     'util': {'drop': ['util_cum', 'util_rate_cum'],
+                              'target': 'util_cum'},
+                     'util_rate': {'drop': ['util_cum', 'util_rate_cum'],
+                                   'target': 'util_rate_cum'}}
+
+        return split_map
+
+    def _split_input_target_all(self):
+        io = {}
+        for data_type in self.data_type:
+            io_model = {}
+            for model in self.model_type:
+                split = self._split_to_input_target(data_type=data_type, model=model)
+                io_model[model] = split
+            io[data_type] = io_model
+
+        return io
+
+    def _split_to_input_target(self, data_type: str, model: str):
+        x = self.data_hx_map[data_type][model].drop(columns=self.split_map[data_type]['drop'])
+        y = self.data_hx_map[data_type][model][self.split_map[data_type]['target']]
+
+        return {'x': x, 'y': y}
+
+    def _load_best_params(self, regr: str):
+        regr_bests = {}
+        for data_type in self.data_type:    # cnt / disc / util
+            model_bests = {}
+            for model in self.model_type:   # av_ad / av_new / k3 / soul / vlst
+                f = open(os.path.join(self.path_model, data_type,
+                                      regr + '_params_' + self.model_grp[model] + '.pickle'), 'rb')
+                model_bests[model] = pickle.load(f)
+                f.close()
+            regr_bests[data_type] = model_bests
+
+        return regr_bests
+
+    def _fit_model(self, dataset: dict, regr: str, params: dict):
+        fitted = defaultdict(dict)
+        for type_key, type_val in params.items():
+            for model_key, model_val in type_val.items():
+                model = self.REGRESSORS[regr](**model_val)
+                data = dataset[type_key][model_key]
+                model.fit(data['x'], data['y'])
+                fitted[model_key].update({type_key: model})
+
+        return fitted
 
     def _calc_util_rate(self, x):
         return x[2] / self.capa_re[(x[0], x[1])]
@@ -221,7 +350,8 @@ class DataPostProcessing(object):
 
         # Load recent reservation cancel dataset
         data_path = os.path.join('..', 'input', 'cancel')
-        cancel_re = pd.read_csv(os.path.join(data_path, 'res_cancel_' + self.update_day_cancel + '.csv'), delimiter='\t')
+        cancel_re = pd.read_csv(os.path.join(data_path, 'res_cancel_' + self.update_day_cancel + '.csv'),
+                                delimiter='\t')
 
         # Rename columns
         cancel_remap_cols = {
@@ -246,8 +376,8 @@ class DataPostProcessing(object):
     def _get_disc_re(self):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'disc_complete')
-        disc_re = pd.read_csv(os.path.join(load_path, 'disc_complete_' + self.update_day_after + '.csv'), delimiter='\t',
-                                    dtype={'date': str, 'disc': int})
+        disc_re = pd.read_csv(os.path.join(load_path, 'disc_complete_' + self.update_day_after + '.csv'),
+                              delimiter='\t', dtype={'date': str, 'disc': int})
         disc_re['date'] = pd.to_datetime(disc_re['date'], format='%Y%m%d')
         disc_re = {date: disc for date, disc in zip(disc_re['date'], disc_re['disc'])}
 
@@ -267,6 +397,16 @@ class DataPostProcessing(object):
                                                                 df['exp_util_rate'], df['disc_rec'])}
 
         return disc_rec
+
+    @staticmethod
+    def _get_season_re():
+        # Load recent seasonality dataset
+        load_path = os.path.join('..', 'input', 'seasonality')
+        ss_curr = pd.read_csv(os.path.join(load_path, 'seasonality_curr.csv'), delimiter='\t')
+        ss_curr['date'] = pd.to_datetime(ss_curr['date'], format='%Y%m%d')
+        season_map = {day: season for day, season in zip(ss_curr['date'], ss_curr['seasonality'])}
+
+        return season_map
 
     def _group_model(self, df: pd.DataFrame):
         # Group Car Model
@@ -326,47 +466,3 @@ class DataPostProcessing(object):
         res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util', 'discount', 'model'])
 
         return res_util_df
-
-
-
-    def _load_hx_data(self):
-        # Load Reservation Count dataset
-        self.cnt_av_ad = pd.read_csv(os.path.join(self.path_hx_data, 'cnt_cum', 'cnt_cum_av_ad.csv'))
-        self.cnt_av_new = pd.read_csv(os.path.join(self.path_hx_data, 'cnt_cum', 'cnt_cum_av_new.csv'))
-        self.cnt_k3 = pd.read_csv(os.path.join(self.path_hx_data, 'cnt_cum', 'cnt_cum_k3.csv'))
-        self.cnt_vlst = pd.read_csv(os.path.join(self.path_hx_data, 'cnt_cum', 'cnt_cum_vlst.csv'))
-        self.cnt_soul = pd.read_csv(os.path.join(self.path_hx_data, 'cnt_cum', 'cnt_cum_soul.csv'))
-
-        # Load Reservation Utilization dataset
-        self.res_util_av_ad = pd.read_csv(os.path.join(self.path_hx_data, 'util_cum', 'util_cum_av_ad.csv'))
-        self.res_util_av_new = pd.read_csv(os.path.join(self.path_hx_data, 'util_cum', 'util_cum_av_new.csv'))
-        self.res_util_k3 = pd.read_csv(os.path.join(self.path_hx_data, 'util_cum', 'util_cum_k3.csv'))
-        self.res_util_vlst = pd.read_csv(os.path.join(self.path_hx_data, 'util_cum', 'util_cum_vlst.csv'))
-        self.res_util_soul = pd.read_csv(os.path.join(self.path_hx_data, 'util_cum', 'util_cum_soul.csv'))
-
-    def _set_split_map(self):
-        data_map = {'cnt': {'av_ad': self.cnt_av_ad,
-                            'av_new': self.cnt_av_new,
-                            'k3': self.cnt_k3,
-                            'vl': self.cnt_vlst,
-                            'su': self.cnt_soul},
-                    'disc': {'av_ad': self.cnt_av_ad,
-                             'av_new': self.cnt_av_new,
-                             'k3': self.cnt_k3,
-                             'vl': self.cnt_vlst,
-                             'su': self.cnt_soul},
-                    'util': {'av_ad': self.res_util_av_ad,
-                             'av_new': self.res_util_av_new,
-                             'k3': self.res_util_k3,
-                             'vl': self.res_util_vlst,
-                             'su': self.res_util_soul}}
-
-        split_map = {'cnt': {'drop': ['cnt_cum'],
-                             'target': 'cnt_cum'},
-                     'disc': {'drop': ['disc_mean'],
-                              'target': 'disc_mean'},
-                     'util': {
-                         'drop': ['util_cum', 'util_rate_cum'],
-                         'target': 'util_rate_cum'}}
-
-        return data_map, split_map

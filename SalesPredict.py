@@ -9,7 +9,6 @@ from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import ExtraTreesRegressor
@@ -861,15 +860,15 @@ class SalesPredict(object):
             model_val['cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
                                        color=cor_line, label='Reservation Count', ax=axes[0])
             model_val['exp_cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                       color=cor_exp_line, label='Exp. Reservation Count', ax=axes[0])
+                                           color=cor_exp_line, label='Exp. Reservation Count', ax=axes[0])
             model_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                       color=cor_line, label='Utilization Rate', ax=axes[1])
+                                        color=cor_line, label='Utilization Rate', ax=axes[1])
             model_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                       color=cor_exp_line, label='Exp. Utilization Rate', ax=axes[1])
+                                            color=cor_exp_line, label='Exp. Utilization Rate', ax=axes[1])
             model_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                       color=cor_line, label='Discount Rate', ax=axes[2])
+                                        color=cor_line, label='Discount Rate', ax=axes[2])
             model_val['exp_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                       color=cor_exp_line, label='Exp. Discount Rate', ax=axes[2])
+                                            color=cor_exp_line, label='Exp. Discount Rate', ax=axes[2])
             if kinds == 'rec':
                 model_val['rec_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
                                                 color="teal", label='Rec. Discount Rate', ax=axes[2])

@@ -62,10 +62,10 @@ def model_2(start_date: str, end_date: str, res_update_day: str):
     model = ResPredict(res_update_day=res_update_day)
 
     # Train
-    # model.train()
+    model.train(model_detail='model')
 
     # Prediction
-    model.predict(pred_days=pred_days)
+    model.predict(pred_days=pred_days, model_detail='model')
 
 
 # Model 3
@@ -119,10 +119,10 @@ def main():
     apply_day = '2020/12/07'
 
     # Data Post Processing
-    update_day_before = '201126'
-    update_day_after = '201204'
-    update_day_cancel = '201203'
-    res_complete_day = '201203'    # 실적
+    update_day_before = '201126'    #
+    update_day_after = '201204'     #
+    update_day_cancel = '201203'    # 취소 데이터 업데이트 날짜
+    res_complete_day = '201203'     # 실적
     disc_rec_day = '20201201'
     start_day = '20201201'
     end_day = '20210228'

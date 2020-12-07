@@ -28,9 +28,6 @@ class TimeSeries(object):
                             'arima': self.model_arima,
                             'hw': self.model_hw}
 
-    def _filter_periods(self):
-        return self.visitor[(self.visitor['date'] >= self.start_date) & (self.visitor['date'] <= self.end_date)]
-
     def train(self, n_test: int, test_models: list, param_grids: dict):
         self.visitor = pd.read_csv(os.path.join('..', 'input', 'jeju_visit_daily.csv'), delimiter='\t')
 
@@ -108,6 +105,9 @@ class TimeSeries(object):
         dmd_pred = pd.DataFrame({'date': ['202012', '202101', '202102'],
                                  'dmd_chg': [chg_rate_20_12, chg_rate_21_01, chg_rate_21_02]})
         dmd_pred.to_csv(os.path.join(self.save_path, 'dmd_pred_2012_2102.csv'), index=False)
+
+    def _filter_periods(self):
+        return self.visitor[(self.visitor['date'] >= self.start_date) & (self.visitor['date'] <= self.end_date)]
 
     # Time series model
     @staticmethod
