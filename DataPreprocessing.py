@@ -1,6 +1,7 @@
 import os
 import datetime as dt
 from datetime import timedelta
+from dateutil.relativedelta import relativedelta
 
 import numpy as np
 import pandas as pd
@@ -95,16 +96,18 @@ class DataPrep(object):
         # Capacity of models
         capa_hx_model = pd.read_csv(os.path.join(capa_hx_path, 'capa_hx_model.csv'), delimiter='\t',
                                     dtype={'date': str, 'model': str, 'capa': int})
-        self.capa_hx_model = {(month, model): capa for month, model, capa in zip(capa_hx_model['date'],
-                                                                                 capa_hx_model['model'],
-                                                                                 capa_hx_model['capa'])}
+        capa_hx_model = self._conv_mon_to_day_hx(df=capa_hx_model)
+        self.capa_hx_model = {(date, model): capa for date, model, capa in zip(capa_hx_model['date'],
+                                                                               capa_hx_model['model'],
+                                                                               capa_hx_model['capa'])}
 
         # Capacity of cars
         capa_hx_car = pd.read_csv(os.path.join(capa_hx_path, 'capa_hx_car.csv'), delimiter='\t',
                                   dtype={'date': str, 'model': str, 'capa': int})
-        self.capa_hx_car = {(month, model): capa for month, model, capa in zip(capa_hx_car['date'],
-                                                                               capa_hx_car['model'],
-                                                                               capa_hx_car['capa'])}
+        capa_hx_car = self._conv_mon_to_day_hx(df=capa_hx_car)
+        self.capa_hx_car = {(date, model): capa for date, model, capa in zip(capa_hx_car['date'],
+                                                                             capa_hx_car['model'],
+                                                                             capa_hx_car['capa'])}
         self.capa = {'hx': {'model': self.capa_hx_model,
                             'car': self.capa_hx_car}}
 
@@ -126,7 +129,7 @@ class DataPrep(object):
         capa_re_model = self._conv_mon_to_day(df=capa_re_model, end_day='28')
         capa_re_model = self._apply_unavail_capa(capa=capa_re_model, capa_unavail=capa_re_unavail_model)
 
-        self.capa_re_model = {(month, model): capa for month, model, capa in zip(capa_re_model['date'],
+        self.capa_re_model = {(date, model): capa for date, model, capa in zip(capa_re_model['date'],
                                                                                  capa_re_model['model'],
                                                                                  capa_re_model['capa'])}
         capa_re_car = pd.read_csv(os.path.join(data_path, 'capa_curr_car.csv'), delimiter='\t',
@@ -135,9 +138,9 @@ class DataPrep(object):
         capa_re_car = self._conv_mon_to_day(df=capa_re_car, end_day='28')
         capa_re_car = self._apply_unavail_capa(capa=capa_re_car, capa_unavail=capa_re_unavail_car)
 
-        self.capa_re_car = {(month, model): capa for month, model, capa in zip(capa_re_car['date'],
-                                                                               capa_re_car['model'],
-                                                                               capa_re_car['capa'])}
+        self.capa_re_car = {(date, model): capa for date, model, capa in zip(capa_re_car['date'],
+                                                                             capa_re_car['model'],
+                                                                             capa_re_car['capa'])}
 
         self.capa = {'re': {'model': self.capa_re_model,
                             'car': self.capa_re_car}}
@@ -231,7 +234,7 @@ class DataPrep(object):
 
     def _grp_by_disc(self, df: pd.DataFrame, group: str, time: str):
         # Reservation
-        disc_res_inc, disc_res_cum = self._grp_by_disc_cnt(res_cnt=df)
+        disc_res_inc, disc_res_cum = self._grp_by_disc_cnt(res_cnt=df, group=group, time=time)
 
         # Utilization
         res_util = self._get_res_util(df=df)  # convert reservation to utilization dataset
@@ -263,18 +266,25 @@ class DataPrep(object):
         self._save_model(type_data=disc_util_inc_grp, type_name='util_inc', group=group, time=time)
         self._save_model(type_data=disc_util_cum_grp, type_name='util_cum', group=group, time=time)
 
-    def _grp_by_disc_cnt(self, res_cnt: pd.DataFrame):
+        print(f"Group: {group} data preprocessing is finished")
+
+    def _grp_by_disc_cnt(self, res_cnt: pd.DataFrame, group: str, time: str):
+        res_cnt = self._add_capacity(df=res_cnt, group=group, time=time)
+        res_cnt['cnt_rate'] = 1 / res_cnt['capa']
+
         # Reservation change on current discount
-        disc_res_inc = self._grp_by_disc_res_inc(res_cnt=res_cnt)
+        disc_res_inc = self._grp_by_disc_res_inc(res_cnt=res_cnt, time=time)
         # Utilization change on current discount
-        disc_res_cum = self._grp_by_disc_res_cum(res_cnt=res_cnt)
+        disc_res_cum = self._grp_by_disc_res_cum(res_cnt=res_cnt, time=time)
 
         return disc_res_inc, disc_res_cum
 
-    @staticmethod
-    def _grp_by_disc_res_inc(res_cnt: pd.DataFrame):
+    def _grp_by_disc_res_inc(self, res_cnt: pd.DataFrame, time: str):
         # Group reservation counts
-        cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
+        if time == 'hx':
+            cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).sum()['cnt_rate']
+        elif time == 're':
+            cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
         cnt = cnt.rename('cnt_add')
 
         # Group discount rates
@@ -292,9 +302,12 @@ class DataPrep(object):
         return disc_res_inc
 
     @staticmethod
-    def _grp_by_disc_res_cum(res_cnt: pd.DataFrame):
+    def _grp_by_disc_res_cum(res_cnt: pd.DataFrame, time: str):
         # Group reservation counts
-        cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
+        if time == 'hx':
+            cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).sum()['cnt_rate']
+        elif time == 're':
+            cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
         cnt_cum = cnt.groupby(by=['rent_day', 'res_model']).cumsum()
 
         # Group discount rates
@@ -302,7 +315,8 @@ class DataPrep(object):
         disc_cum = disc.groupby(by=['rent_day', 'res_model']).cumsum()
 
         cum = pd.DataFrame({'cnt_cum': cnt_cum, 'disc_cum': disc_cum}, index=cnt_cum.index)
-        cum['disc_mean'] = cum['disc_cum'] / cum['cnt_cum']
+        cnt_grp = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
+        cum['disc_mean'] = cum['disc_cum'] / cnt_grp.groupby(by=['rent_day', 'res_model']).cumsum()
 
         ss_lt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).mean()[['seasonality', 'lead_time_vec']]
 
@@ -435,6 +449,18 @@ class DataPrep(object):
         return df.rename(columns=rename_cols)
 
     @staticmethod
+    def _conv_mon_to_day_hx(df: pd.DataFrame):
+        df_days = pd.DataFrame()
+        for yyyymm, model, capa in zip(df['date'], df['model'], df['capa']):
+            dt_start = pd.to_datetime(yyyymm, format='%Y%m')
+            dt_end = dt_start + relativedelta(months=+1) - dt.timedelta(days=1)
+            days = pd.date_range(start=dt_start, end=dt_end)
+            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
+            df_days = pd.concat([df_days, temp], axis=0)
+
+        return df_days
+
+    @staticmethod
     def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
         months = np.sort(df['date'].unique())
         days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
@@ -467,13 +493,14 @@ class DataPrep(object):
     def _set_capa(self, x, time, group):
         return self.capa[time][group][(x[0], x[1])]
 
-    def _add_capacity(self, util: pd.DataFrame, group: str, time: str):
+    def _add_capacity(self, df: pd.DataFrame, group: str, time: str):
         # util['month'] = util['rent_day'].dt.strftime('%Y%m')
         if group == 'car':
-            util['capa'] = util[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
+            df['capa'] = df[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
         elif group == 'model':
-            util['capa'] = util[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
-        return util
+            df['capa'] = df[['rent_day', 'res_model']].apply(self._set_capa, args=(time, group), axis=1)
+
+        return df
 
     @staticmethod
     def _div_into_group(df, group: str, time: str):
@@ -521,16 +548,16 @@ class DataPrep(object):
         disc_util_cum = self._add_lead_time_vec(df=disc_util_cum)
 
         # Add capacity and calculate utilization rate
-        disc_util_inc = self._add_capacity(util=disc_util_inc, group=group, time=time)
-        disc_util_cum = self._add_capacity(util=disc_util_cum, group=group, time=time)
+        disc_util_inc = self._add_capacity(df=disc_util_inc, group=group, time=time)
+        disc_util_cum = self._add_capacity(df=disc_util_cum, group=group, time=time)
 
         # Calculate utilization rate
         disc_util_inc['util_rate_add'] = disc_util_inc['util_add'] / disc_util_inc['capa']
         disc_util_cum['util_rate_cum'] = disc_util_cum['util_cum'] / disc_util_cum['capa']
 
         # Drop unnecessary columns
-        disc_util_inc = disc_util_inc.drop(columns=['month', 'capa'])
-        disc_util_cum = disc_util_cum.drop(columns=['month', 'capa'])
+        disc_util_inc = disc_util_inc.drop(columns=['capa'], errors='ignore')
+        disc_util_cum = disc_util_cum.drop(columns=['capa'], errors='ignore')
 
         return disc_util_inc, disc_util_cum
 

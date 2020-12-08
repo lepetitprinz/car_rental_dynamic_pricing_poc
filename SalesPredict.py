@@ -9,9 +9,12 @@ from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib import rc, font_manager
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import ExtraTreesRegressor
+
+rc('font', family='NanumBarunGothic')
 
 
 class SalesPredict(object):
@@ -20,6 +23,12 @@ class SalesPredict(object):
                   "extr": ExtraTreesRegressor}
 
     def __init__(self, res_update_day: str):
+        # Path of data & model
+        self.path_input = os.path.join('..', 'input')
+        self.path_trend_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
+        self.path_sales_per_res = os.path.join('..', 'result', 'data', 'sales_prediction')
+        self.path_model = os.path.join('..', 'result', 'model', 'res_pred_lead_time')
+
         # Data & model types
         self.data_type = ['cnt_inc', 'cnt_cum', 'util_inc', 'util_cum', 'disc']
         self.model_type = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
@@ -54,12 +63,6 @@ class SalesPredict(object):
         # Initial Setting
         self.random_state = 2020    # Data split randomness
         self.test_size = 0.2        # Test dataset size
-
-        # Path of data & model
-        self.path_input = os.path.join('..', 'input')
-        self.path_trend_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
-        self.path_sales_per_res = os.path.join('..', 'result', 'data', 'sales_prediction')
-        self.path_model = os.path.join('..', 'result', 'model', 'res_pred_lead_time')
 
         # Dataset
         self.res_data_hx: dict = {}
@@ -111,8 +114,6 @@ class SalesPredict(object):
         res_hx_grp = res_hx.groupby(by=['seasonality', 'res_model']).mean()
         res_hx_grp['rent_fee_org'] = res_hx_grp['rent_fee'] / (1 - res_hx_grp['discount'] / 100)
         res_hx_grp = res_hx_grp.reset_index(level=(0, 1))
-
-        # res_hx_grp['rent_period_hours'] = np.round(res_hx_grp['rent_period_hours'].to_numpy(), 0)
 
         res_hx_grp['rent_fee_org'] = np.round(res_hx_grp['rent_fee_org'].to_numpy(), 0)
         res_hx_grp['cdw_fee'] = np.round(res_hx_grp['cdw_fee'].to_numpy(), 0)
@@ -601,29 +602,30 @@ class SalesPredict(object):
 
         return fitted_re
 
-    def _get_pred_input_init(self, season: int, lead_time_vec: int, res_cnt: dict, disc: int):
+    def _get_pred_input_init(self, pred_mon: str, season: int, lead_time_vec: int, res_cnt: dict, disc: int):
         pred_input = defaultdict(dict)
         for model in self.model_type:
+            capa = self.capa_re[(pred_mon, self.model_type_map[model])]
             for data_type in self.data_type:
                 if data_type in ['disc']:
                     pred_input[model].update({data_type: np.array([season, lead_time_vec,
-                                                                   res_cnt.get(model, 0)]).reshape(1, -1)})
+                                                                   res_cnt.get(model, 0) / capa]).reshape(1, -1)})
                 else:
                     pred_input[model].update({data_type: np.array([season, lead_time_vec, disc]).reshape(1, -1)})
 
         return pred_input
 
-    def _get_pred_input(self, season: int, lead_time_vec: int, res_cnt: int, disc: int):
+    def _get_pred_input(self, season: int, lead_time_vec: int, res_cnt: int, disc: int, capa: int):
         pred_input = defaultdict(dict)
         for data_type in self.data_type:
             if data_type in ['disc']:
-                pred_input[data_type] = np.array([season, lead_time_vec, res_cnt]).reshape(1, -1)
+                pred_input[data_type] = np.array([season, lead_time_vec, res_cnt / capa]).reshape(1, -1)
             else:
                 pred_input[data_type] = np.array([season, lead_time_vec, disc]).reshape(1, -1)
 
         return pred_input
 
-    def _pred_sales_exp(self, pred_input: dict, season: int, init_data: list, lead_time_vec: int,
+    def _pred_sales_exp(self, pred_mon: str, pred_input: dict, season: int, init_data: list, lead_time_vec: int,
                         fitted_model: dict, sales_per_res: dict, cdw_per_res: dict):
         # Calculate first row
         temp = defaultdict(dict)
@@ -639,9 +641,14 @@ class SalesPredict(object):
             temp[model].update({'exp_sales': [exp_sales]})    # Expected sales
             temp[model].update({'exp_cum_sales': [exp_sales]})    # Expected cum. sales
 
+            capa = self.capa_re[(pred_mon, self.model_type_map[model])]
+
             # Calculate current sales
             for key, val in model_val.items():    # Type: cnt_inc / cnt_cum / util_inc / util_cum / disc
-                temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0], 1)]})
+                if key in ['cnt_inc', 'cnt_cum']:
+                    temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0] * capa, 2)]})
+                else:
+                    temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0], 2)]})
 
         # Calculate continuous rows
         for lt_vec in np.arange(lead_time_vec + 1, 1):
@@ -657,7 +664,7 @@ class SalesPredict(object):
                 # Maximum Utilization rate : 100%
                 if util >= 1:
                     util = 1
-                    if temp[model]['res_util'][-1] == 1:
+                    if temp[model]['res_util'][-1] >= 1:
                         exp_sales = 0
                 exp_cum_sales = temp[model]['exp_cum_sales'][-1] + exp_sales
 
@@ -668,14 +675,19 @@ class SalesPredict(object):
                 temp[model]['exp_sales'].append(round(exp_sales, 0))
                 temp[model]['exp_cum_sales'].append(round(exp_cum_sales, 0))
 
+                capa = self.capa_re[(pred_mon, self.model_type_map[model])]
+
                 # Expectation
-                pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc)
+                pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc, capa=capa)
                 for type_key, type_val in model_val.items():
-                    temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0], 2))
+                    if type_key in ['cnt_inc', 'cnt_cum']:
+                        temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0] * capa, 2))
+                    else:
+                        temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0], 2))
 
         return temp
 
-    def _pred_sales_rec(self, pred_input: dict, season: int, init_data: list, lead_time_vec: int,
+    def _pred_sales_rec(self, pred_mon: str, pred_input: dict, season: int, init_data: list, lead_time_vec: int,
                         fitted_model: dict, sales_per_res: dict, cdw_per_res: dict):
         # Calculate first row
         temp = defaultdict(dict)
@@ -692,9 +704,13 @@ class SalesPredict(object):
             temp[model].update({'exp_sales': [exp_sales]})    # Expected sales
             temp[model].update({'exp_cum_sales': [exp_sales]})    # Expected cum. sales
 
+            capa = self.capa_re[(pred_mon, self.model_type_map[model])]
             # Calculate current sales
             for key, val in model_val.items():    # Type: cnt_inc / cnt_cum / util_inc / util_cum / disc
-                temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0], 1)]})
+                if key in ['cnt_inc', 'cnt_cum']:
+                    temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0] * capa, 2)]})
+                else:
+                    temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0], 2)]})
 
             # Calculate recommendation discount
             disc_chg = self._rec_disc_function(curr=res_util * 100, exp=temp[model]['exp_util_cum'][-1] * 100)
@@ -718,7 +734,7 @@ class SalesPredict(object):
                 # Maximum Utilization rate : 100%
                 if util >= 1:
                     util = 1
-                    if temp[model]['res_util'][-1] == 1:
+                    if temp[model]['res_util'][-1] >= 1:
                         exp_sales = 0
 
                 exp_cum_sales = temp[model]['exp_cum_sales'][-1] + exp_sales
@@ -730,10 +746,15 @@ class SalesPredict(object):
                 temp[model]['exp_sales'].append(round(exp_sales, 0))
                 temp[model]['exp_cum_sales'].append(round(exp_cum_sales, 0))
 
+                capa = self.capa_re[(pred_mon, self.model_type_map[model])]
+
                 # Expectation
-                pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc)
+                pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc, capa=capa)
                 for type_key, type_val in model_val.items():
-                    temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0], 2))
+                    if type_key in ['cnt_inc', 'cnt_cum']:
+                        temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0] * capa, 2))
+                    else:
+                        temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0], 2))
 
                 # Calculate recommendation discount
                 disc_chg = self._rec_disc_function(curr=util * 100, exp=temp[model]['exp_util_cum'][-1] * 100)
@@ -803,6 +824,7 @@ class SalesPredict(object):
     def _pred(self, pred_day: str, apply_day: str, fitted_model: dict):
         # Get season value and initial discount rate
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
+        pred_mon = ''.join(pred_day.split('-'))[:6]
         apply_datetime = dt.datetime(*list(map(int, apply_day.split('/'))))
         season = self.day_to_season[pred_datetime]
         fee_per_res = self.rent_fee_hx[season]  # Reservation fee of history dataset by each model
@@ -817,17 +839,19 @@ class SalesPredict(object):
         lead_time_vec = self.lt_to_lt_vec[lead_time * -1]
 
         # Make initial input
-        pred_input = self._get_pred_input_init(season=season, lead_time_vec=lead_time_vec,
+        pred_input = self._get_pred_input_init(pred_mon=pred_mon, season=season, lead_time_vec=lead_time_vec,
                                                res_cnt=init_res, disc=init_disc)
 
         # Rolling sales prediction
         # Expect sales on past trend
-        pred_sales_exp = self._pred_sales_exp(pred_input=pred_input, season=season, lead_time_vec=lead_time_vec,
+        pred_sales_exp = self._pred_sales_exp(pred_mon=pred_mon, pred_input=pred_input, season=season,
+                                              lead_time_vec=lead_time_vec,
                                               sales_per_res=fee_per_res, cdw_per_res=cdw_per_res,
                                               init_data=[init_res, init_util, init_disc, init_sales],
                                               fitted_model=fitted_model)
         # Expect sales on recommendation
-        pred_sales_rec = self._pred_sales_rec(pred_input=pred_input, season=season, lead_time_vec=lead_time_vec,
+        pred_sales_rec = self._pred_sales_rec(pred_mon=pred_mon, pred_input=pred_input, season=season,
+                                              lead_time_vec=lead_time_vec,
                                               sales_per_res=fee_per_res, cdw_per_res=cdw_per_res,
                                               init_data=[init_res, init_util, init_disc, init_sales],
                                               fitted_model=fitted_model)
@@ -839,42 +863,78 @@ class SalesPredict(object):
         self._save_result(result=pred_sales_exp, pred_day=pred_day, apply_day=apply_day, kinds='exp')
         self._save_result(result=pred_sales_rec, pred_day=pred_day, apply_day=apply_day, kinds='rec')
 
-        self._draw_trend_graph(result=pred_sales_exp, pred_day=pred_day, apply_day=apply_day, kinds='exp')
-        self._draw_trend_graph(result=pred_sales_rec, pred_day=pred_day, apply_day=apply_day, kinds='rec')
+        # self._draw_trend_graph(exp=pred_sales_exp, rec=pred_sales_rec,
+        #                        pred_day=pred_day, apply_day=apply_day)
 
         print(f'Prediction result on {pred_day} is saved')
 
-    def _draw_trend_graph(self, result: dict, pred_day: str, apply_day: str,  kinds: str):
+    def _draw_trend_graph(self, exp: dict, rec: dict, pred_day: str, apply_day: str):
         pred_day_str = ''.join(pred_day.split('-'))
         apply_day_str = ''.join(apply_day.split('/'))
 
-        fig_size = (8, 5)
-        for model_key, model_val in result.items():
+        fig_size = (9, 6)
+        for (exp_key, exp_val), (rec_key, rec_val) in zip(exp.items(), rec.items()):
             # Figure setting
             fig, axes = plt.subplots(3, 1)
-            cor_line = '#875f42'
-            cor_exp_line = 'lightcoral'
-            save_path = os.path.join(self.path_sales_per_res, apply_day_str, kinds, pred_day_str)
+            cor_exp = '#3a18b1'
+            cor_exp_exp = '#045c5a'
+            cor_rec = '#9d0216'
+            cor_rec_exp = '#fb5581'
 
-            exp_sales = model_val['exp_cum_sales'].iloc[-1]
-            model_val['cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                       color=cor_line, label='Reservation Count', ax=axes[0])
-            model_val['exp_cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                           color=cor_exp_line, label='Exp. Reservation Count', ax=axes[0])
-            model_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                        color=cor_line, label='Utilization Rate', ax=axes[1])
-            model_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                            color=cor_exp_line, label='Exp. Utilization Rate', ax=axes[1])
-            model_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                        color=cor_line, label='Discount Rate', ax=axes[2])
-            model_val['exp_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                            color=cor_exp_line, label='Exp. Discount Rate', ax=axes[2])
-            if kinds == 'rec':
-                model_val['rec_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                                color="teal", label='Rec. Discount Rate', ax=axes[2])
-            # axes.legend()
-            plt.title(f'Exp. Sales: {exp_sales}')
-            plt.savefig(os.path.join(save_path, 'sales_pred_' + model_key + '.png'))
+            # Dataframe setting
+            exp_sales = exp_val['exp_cum_sales'].iloc[-1]
+            rec_sales = rec_val['exp_cum_sales'].iloc[-1]
+
+            exp_val = exp_val.set_index('lead_time', drop=True)
+            rec_val = rec_val.set_index('lead_time', drop=True)
+
+            # Reservation Count Graph
+            exp_val['cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                     color=cor_exp, label='예약건수(exp)', ax=axes[0])
+            exp_val['exp_cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9, linestyle='--',
+                                         color=cor_exp_exp, label='기대 예약건수(exp)', ax=axes[0])
+            rec_val['cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                     color=cor_rec, label='예약건수(rec)', ax=axes[0])
+            rec_val['exp_cnt'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9, linestyle='--',
+                                         color=cor_rec_exp, label='기대 예약건수(rec)', ax=axes[0])
+            axes[0].set_xlabel('리드타임')
+            axes[1].set_ylabel('건')
+            axes[0].legend()
+
+            # Reservation Utilization Graph
+            exp_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                      color=cor_exp, label='가동률(exp)', ax=axes[1])
+            exp_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                          color=cor_exp_exp, label='기대 가동률(exp)', ax=axes[1])
+            rec_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                      color=cor_rec, label='가동률(rec)', ax=axes[1])
+            rec_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                          color=cor_rec_exp, label='기대 가동률(rec)', ax=axes[1])
+            axes[1].set_xlabel('리드타임')
+            axes[1].set_ylabel('%')
+            axes[1].legend()
+
+            # Reservation Discount Graph
+            exp_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                      color=cor_exp, label='할인율(exp)', ax=axes[2])
+            exp_val['exp_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                          color=cor_exp_exp, label='기대 할인율(exp)', ax=axes[2])
+            rec_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                      color=cor_rec, label='할인율(rec)', ax=axes[2])
+            rec_val['rec_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                          color=cor_rec_exp, label='추천 할인율(rec)', ax=axes[2])
+            axes[2].set_xlabel('리드타임')
+            axes[2].set_ylabel('%')
+            axes[2].legend()
+
+            plt.suptitle(f'Exp. Sales: {exp_sales} / Rec. Sales: {rec_sales}')
+
+            # Save images
+            save_path = os.path.join(self.path_sales_per_res, apply_day_str, 'img', pred_day_str)
+            if not os.path.exists(save_path):
+                os.mkdir(save_path)
+            plt.savefig(os.path.join(save_path, 'sales_pred_' + exp_key + '.png'))
+            plt.close()
 
     @staticmethod
     def _rearr_column(df: dict, pred_day: str, apply_day: str, kinds: str):

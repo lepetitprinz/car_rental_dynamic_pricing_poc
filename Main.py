@@ -24,7 +24,7 @@ warnings.filterwarnings('ignore')
 def data_preprocessing(update_day: str):
     data_prep = DataPrep()
     # History dataset
-    # data_prep.prep_res_hx()
+    data_prep.prep_res_hx()
     # Recent  dataset
     data_prep.prep_res_recent(update_day=update_day)
 
@@ -147,19 +147,19 @@ def main():
     #         res_update_day=res_update_day)
 
     # Sales Prediction
-    # model_sales_pred(start_date=start_date,
-    #                  end_date=end_date,
-    #                  apply_day=apply_day,
-    #                  res_update_day=res_update_day)
+    model_sales_pred(start_date=start_date,
+                     end_date=end_date,
+                     apply_day=apply_day,
+                     res_update_day=res_update_day)
 
     # Data Post Processing
-    data_post_processing(update_day_before=update_day_before,
-                         update_day_after=update_day_after,
-                         update_day_cancel=update_day_cancel,
-                         res_complete_day=res_complete_day,
-                         disc_rec_day=disc_rec_day,
-                         start_day=start_day,
-                         end_day=end_day)
+    # data_post_processing(update_day_before=update_day_before,
+    #                      update_day_after=update_day_after,
+    #                      update_day_cancel=update_day_cancel,
+    #                      res_complete_day=res_complete_day,
+    #                      disc_rec_day=disc_rec_day,
+    #                      start_day=start_day,
+    #                      end_day=end_day)
 
 
 # Run main function

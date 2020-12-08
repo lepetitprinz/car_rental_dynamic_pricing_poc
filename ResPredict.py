@@ -16,16 +16,16 @@ class ResPredict(object):
                   "extr": ExtraTreesRegressor}
 
     def __init__(self, res_update_day: str):
+        # Path of data & model
+        self.path_data_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx')
+        self.path_model = os.path.join('..', 'result', 'model', 'model_2')
+
         self.random_state = 2020
         self.test_size = 0.2
         self.data_type: list = ['cnt', 'disc', 'util']
         self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
         self.model_type: list = ['av', 'k3', 'vl', 'su']
         self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
-
-        # Path of data & model
-        self.path_data_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx')
-        self.path_model = os.path.join('..', 'result', 'model', 'model_2')
 
         # Prediction variables
         # Initial values of variables
