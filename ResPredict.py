@@ -283,7 +283,7 @@ class ResPredict(object):
 
     def _get_res_cnt_re(self):
         # Load recent reservation dataset
-        load_path = os.path.join('..', 'input', 'reservation')
+        load_path = os.path.join('..', 'input', 'res_status')
         res_re = pd.read_csv(os.path.join(load_path, 'res_' + self.res_update_day + '.csv'), delimiter='\t')
 
         res_remap_cols = {

@@ -49,9 +49,9 @@ class DataPrep(object):
         # Data preprocessing: by model
         self._prep_by_group(df=res_hx, group='model', time='hx')
 
-    def prep_res_recent(self, update_day: str):
+    def prep_res_recent(self, status_update_day: str):
         # Load ad set recent reservation dataset
-        res_re = self._load_recent_dataset(update_day=update_day)
+        res_re = self._load_recent_dataset(update_day=status_update_day)
 
         # Rename columns
         res_re = self._rename_col_res_recent(df=res_re)
@@ -79,7 +79,7 @@ class DataPrep(object):
     # Methods for load dataset (History / Recent)
     def _load_hx_dataset(self):
         # Load reservation history
-        res_hx = pd.read_csv(os.path.join(self.load_path, 'reservation', 'res_hx.csv'),
+        res_hx = pd.read_csv(os.path.join(self.load_path, 'res_status', 'res_hx.csv'),
                              dtype={'res_num': str, 'res_route_nm': str, 'res_model_nm': str, 'rent_day': str,
                                     'rent_time': str, 'return_day': str, 'return_time': str, 'car_rent_fee': int,
                                     'cdw_fee': int, 'tot_fee': int, 'discount': float, 'res_day': str,
@@ -130,8 +130,8 @@ class DataPrep(object):
         capa_re_model = self._apply_unavail_capa(capa=capa_re_model, capa_unavail=capa_re_unavail_model)
 
         self.capa_re_model = {(date, model): capa for date, model, capa in zip(capa_re_model['date'],
-                                                                                 capa_re_model['model'],
-                                                                                 capa_re_model['capa'])}
+                                                                               capa_re_model['model'],
+                                                                               capa_re_model['capa'])}
         capa_re_car = pd.read_csv(os.path.join(data_path, 'capa_curr_car.csv'), delimiter='\t',
                                   dtype={'date': str, 'model': str, 'capa': int})
         capa_re_unavail_car = pd.read_csv(os.path.join(data_path, 'capa_unavail_car.csv'), delimiter='\t')
@@ -146,7 +146,7 @@ class DataPrep(object):
                             'car': self.capa_re_car}}
 
         # Recent reservation dataset
-        data_path = os.path.join('..', 'input', 'reservation', 'res_' + update_day + '.csv')
+        data_path = os.path.join('..', 'input', 'res_status', 'res_' + update_day + '.csv')
         data_type = {'예약경로': int, '예약경로명': str, '계약번호': int, '고객구분': int, '고객구분명': str,
                      '총 청구액(VAT포함)': str, '예약모델': str, '예약모델명': str, '차급': str, '대여일': str,
                      '대여시간': str, '반납일': str, '반납시간': str, '대여기간(일)': int, '대여기간(시간)': int,
@@ -279,13 +279,14 @@ class DataPrep(object):
 
         return disc_res_inc, disc_res_cum
 
-    def _grp_by_disc_res_inc(self, res_cnt: pd.DataFrame, time: str):
+    @staticmethod
+    def _grp_by_disc_res_inc(res_cnt: pd.DataFrame, time: str):
         # Group reservation counts
+        cnt = None
         if time == 'hx':
             cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).sum()['cnt_rate']
         elif time == 're':
             cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).count()['lead_time_vec']
-        cnt = cnt.rename('cnt_add')
 
         # Group discount rates
         disc = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).mean()['discount']
@@ -304,6 +305,7 @@ class DataPrep(object):
     @staticmethod
     def _grp_by_disc_res_cum(res_cnt: pd.DataFrame, time: str):
         # Group reservation counts
+        cnt = None
         if time == 'hx':
             cnt = res_cnt.groupby(by=['rent_day', 'res_model', 'res_day']).sum()['cnt_rate']
         elif time == 're':
@@ -629,7 +631,7 @@ class DataPrep(object):
         # Car grade
         res_hx = res_hx[res_hx['res_model_nm'].isin(self.grade_1_6)]
 
-        res_hx.to_csv(os.path.join(self.load_path, 'reservation', 'res_hx.csv'), index=False)
+        res_hx.to_csv(os.path.join(self.load_path, 'res_status', 'res_hx.csv'), index=False)
 
     def prep_curr(self):
         self.prep_res_curr()

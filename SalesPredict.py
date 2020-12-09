@@ -9,7 +9,7 @@ from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib import rc, font_manager
+from matplotlib import rc
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import ExtraTreesRegressor
@@ -190,7 +190,7 @@ class SalesPredict(object):
     #################################
     # Load reservation history
     def _load_data_hx(self):
-        res_hx = pd.read_csv(os.path.join(self.path_input, 'reservation', 'res_hx.csv'),
+        res_hx = pd.read_csv(os.path.join(self.path_input, 'res_status', 'res_hx.csv'),
                              dtype={'res_num': str, 'res_route_nm': str, 'res_model_nm': str, 'rent_day': str,
                                     'rent_time': str, 'return_day': str, 'return_time': str, 'car_rent_fee': int,
                                     'cdw_fee': int, 'tot_fee': int, 'discount': float, 'res_day': str,
@@ -441,7 +441,7 @@ class SalesPredict(object):
 
     def _get_init_res_cnt(self):
         # Load recent reservation dataset
-        load_path = os.path.join('..', 'input', 'reservation')
+        load_path = os.path.join('..', 'input', 'res_status')
         res_re = pd.read_csv(os.path.join(load_path, 'res_' + self.res_update_day + '.csv'), delimiter='\t')
 
         # Rename columns

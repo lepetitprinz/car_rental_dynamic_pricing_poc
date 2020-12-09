@@ -19,7 +19,8 @@ class TimeSeries(object):
     Jeju visitors prediction model (Time series model)
     """
 
-    def __init__(self, start_date: int, end_date: int):
+    def __init__(self, start_date: str, end_date: str):
+        self.load_path = os.path.join('..', 'input', 'demand')
         self.save_path = os.path.join('..', 'result', 'model', 'time_series')
         self.visitor: pd.DataFrame = pd.DataFrame()
         self.start_date = start_date
@@ -29,7 +30,7 @@ class TimeSeries(object):
                             'hw': self.model_hw}
 
     def train(self, n_test: int, test_models: list, param_grids: dict):
-        self.visitor = pd.read_csv(os.path.join('..', 'input', 'jeju_visit_daily.csv'), delimiter='\t')
+        self.visitor = pd.read_csv(os.path.join(self.load_path, 'jeju_visit_daily.csv'), delimiter='\t')
 
         data = self._filter_periods()
 
@@ -48,6 +49,7 @@ class TimeSeries(object):
             err_dom.append([model, self.tune_hyper_parameter(model=model, data=jeju_dom,
                                                              n_test=n_test, param_grid=param_grids[model])])
         best_param_dom = sorted(err_dom, key=lambda x: x[1][1])[0]
+
         # Foreign
         err_for = []
         for model in test_models:
