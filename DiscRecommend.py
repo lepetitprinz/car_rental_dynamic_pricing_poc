@@ -9,26 +9,44 @@ import pandas as pd
 
 class DiscRecommend(object):
 
-    def __init__(self, res_update_day: str):
+    def __init__(self, res_update_day: str, apply_day: str, model_detail: str,
+                 disc_confirm_last_week: str):
         # Inintial dataset
         self.res_update_day = res_update_day
+        self.apply_day = apply_day
+        self.disc_confirm_last_week = disc_confirm_last_week
+        self.apply_day_str = ''.join(apply_day.split('/'))
+        self.model_detail = model_detail
         self.capa_re: dict = dict()
         self.season: pd.DataFrame = pd.DataFrame()
         self.dmd_pred: pd.DataFrame = pd.DataFrame()
+
+        # Data Type
+        self.data_type: list = ['cnt', 'disc', 'util']
+        self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
+
         self.model_type: list = ['av', 'k3', 'vl', 'su']
-        self.model_map = {'av': 'AVANTE', 'k3': 'K3', 'vl': 'VELOSTER', 'su': 'SOUL'}
+        self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
+        self.detail_type: dict = {'model': self.model_type, 'car': self.car_type}
+        self.model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
+                             'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
+        self.model_type_map = {'av_ad': '아반떼 AD (G) F/L', 'av_new': '올 뉴 아반떼 (G)',
+                               'k3': 'ALL NEW K3 (G)', 'soul': '쏘울 부스터 (G)',
+                               'vlst': '더 올 뉴 벨로스터 (G)'}
 
         # dataset on prediction day
-        self.res_exp: dict = dict()       # key: av / k3 / vl / su
+        self.res_pred: dict = dict()       # key: av / k3 / vl / su
         self.res_cnt_re: dict = dict()    # key: av / k3 / vl / su
         self.res_util_re: dict = dict()   # key: av / k3 / vl / su
+        self.disc_confirm: dict = {}
 
         # Recommendation Input
         self.rec_input: dict = dict()
         self.exp_dmd_change: float = 0.
 
-    def rec(self, pred_days: list, apply_day: str):
+    def rec(self, pred_days: list):
         self._load_init_data()
+        self.disc_confirm = self._get_disc_confirm_last_week()
 
         summary = defaultdict(list)
         for pred_day in pred_days:
@@ -42,7 +60,7 @@ class DiscRecommend(object):
             rec_input = self._add_feature(input_dict=rec_input, pred_day=pred_day)
             rec_input = self._fill_na(input_dict=rec_input)    # Forward fill
             self._set_exp_dmd_change(pred_day=pred_day)    #
-            rec_input = self._filter_date(input_dict=rec_input, apply_day=apply_day)
+            rec_input = self._filter_date(input_dict=rec_input)
             rec_input = self._scale_data(input_dict=rec_input)
 
             # Recommendation
@@ -58,7 +76,7 @@ class DiscRecommend(object):
             output_renamed = self._rename_col_kor(output=output_rearranged)
 
             # Save result on each day
-            self._save_result(output=output_renamed, pred_day=pred_day, apply_day=apply_day)
+            self._save_result(output=output_renamed, pred_day=pred_day)
             # Get recommendation data of latest day
             fst_rec_data = self._get_fst_rec_data(output=output_renamed, pred_day=pred_day)
 
@@ -69,15 +87,28 @@ class DiscRecommend(object):
         summary_df = self._filter_arrange_summary(summary=summary)
 
         # Save summary results
-        self._save_summary_result(summary=summary_df, apply_day=apply_day)
+        self._save_summary_result(summary=summary_df)
         print("Recommendation Process is finished")
+
+    def _get_disc_confirm_last_week(self):
+        # Initial capacity of each model
+        load_path = os.path.join('..', 'input', 'disc_complete')
+        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + self.disc_confirm_last_week + '.csv'),
+                              delimiter='\t', dtype={'date': str, 'disc': int})
+        disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
+        disc_comfirm_dict = defaultdict(dict)
+        for model, date, disc in zip(disc_comfirm['model'], disc_comfirm['date'], disc_comfirm['disc']):
+            disc_comfirm_dict[self.model_nm_map[model]].update({date: disc})
+
+        return disc_comfirm_dict
 
     def _load_init_data(self):
         # Capacity history of each car model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_re = pd.read_csv(os.path.join(load_path, 'capa_curr_model.csv'), delimiter='\t',
+        capa_re = pd.read_csv(os.path.join(load_path, 'capa_curr_' + self.model_detail + '.csv'), delimiter='\t',
                               dtype={'date': str, 'model': str, 'capa': int})
-        capa_re_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_model.csv'), delimiter='\t')
+        capa_re_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_' + self.model_detail + '.csv'),
+                                      delimiter='\t')
 
         capa_re = self._conv_mon_to_day(df=capa_re, end_day='28')
         capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_re_unavail)
@@ -119,23 +150,24 @@ class DiscRecommend(object):
         return capa_new
 
     def _load_data(self, pred_day: str):
-        load_path = os.path.join('..', 'result', 'data', 'prediction')
-        self.res_exp = {'av': pd.read_csv(os.path.join(load_path, 'av', 'm2_pred(' + pred_day + ').csv')),
-                        'k3': pd.read_csv(os.path.join(load_path, 'k3', 'm2_pred(' + pred_day + ').csv')),
-                        'vl': pd.read_csv(os.path.join(load_path, 'vl', 'm2_pred(' + pred_day + ').csv')),
-                        'su': pd.read_csv(os.path.join(load_path, 'su', 'm2_pred(' + pred_day + ').csv'))}
+        load_path = os.path.join('..', 'result', 'data', 'prediction', self.apply_day_str)
+        detail_type = self.detail_type[self.model_detail]
+        res_exp = {}
+        for model in detail_type:
+            res_exp[model] = pd.read_csv(os.path.join(load_path, model, 'res_pred(' + pred_day + ').csv'))
+        self.res_pred = res_exp
 
         # Current reservation dataset
-        load_path = os.path.join('..', 'result', 'data', 'model_2', 're', 'model')
+        load_path = os.path.join('..', 'result', 'data', 'model_2', 're', self.model_detail)
         res_re = defaultdict(dict)
-        for data_type in ['res', 'util']:
-            for model in self.model_type:
-                df = pd.read_csv(os.path.join(load_path, 'disc_' + data_type + '_cum_' + model + '.csv'))
+        for data_type in ['cnt_cum', 'util_cum']:
+            for model in detail_type:
+                df = pd.read_csv(os.path.join(load_path, data_type, data_type + '_' + model + '.csv'))
                 df = df[df['rent_day'] == pred_day]
                 res_re[data_type].update({model: df})
 
-        self.res_cnt_re = res_re['res']
-        self.res_util_re = res_re['util']
+        self.res_cnt_re = res_re['cnt_cum']
+        self.res_util_re = res_re['util_cum']
 
     def _drop_column(self):
         # Drop columns
@@ -157,12 +189,12 @@ class DiscRecommend(object):
             df.rename(columns={'util_cum': 'curr_util_time',
                                'util_rate_cum': 'curr_util_rate'}, inplace=True)
 
-        for df in self.res_exp.values():
+        for df in self.res_pred.values():
             df.rename(columns={'exp_util': 'exp_util_rate'}, inplace=True)
 
     def _merge_hx_curr_df(self):
         rec_input = {}
-        for (model_hx, df_hx), (model_curr, df_curr) in zip(self.res_exp.items(), self.res_cnt_re.items()):
+        for (model_hx, df_hx), (model_curr, df_curr) in zip(self.res_pred.items(), self.res_cnt_re.items()):
             merged_model = pd.merge(df_hx, df_curr, how='left', on=['lead_time'],
                                     left_index=True, right_index=False)
             rec_input[model_hx] = merged_model
@@ -177,7 +209,8 @@ class DiscRecommend(object):
     def _add_feature(self, input_dict: dict, pred_day: str):
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
         for model, df in input_dict.items():
-            df['avail_capa'] = self.capa_re[(pred_datetime, self.model_map[model])] - df['curr_util_time']
+            df['avail_capa'] = self.capa_re[(pred_datetime, self.model_type_map[model])] - df['curr_util_time']
+            df['applied_disc'] = self.disc_confirm[model][pred_datetime]
 
         return input_dict
 
@@ -196,11 +229,10 @@ class DiscRecommend(object):
             if (pred_datetime >= date) and (pred_datetime < date + relativedelta(months=1)):
                 self.exp_dmd_change = dmd_chg
 
-    @staticmethod
-    def _filter_date(input_dict: dict,  apply_day: str):
+    def _filter_date(self, input_dict: dict):
         for model, df in input_dict.items():
             df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
-            apply_datetime = dt.datetime(*list(map(int, apply_day.split('/'))))
+            apply_datetime = dt.datetime(*list(map(int, self.apply_day.split('/'))))
             df = df[df['date'] >= apply_datetime]
             df['date'] = df['date'].apply(lambda x: dt.datetime.strftime(x, '%Y-%m-%d'))
             input_dict[model] = df
@@ -222,7 +254,7 @@ class DiscRecommend(object):
         rec_output = {}
         for model, df in input_dict.items():
             df['rec_disc_chg_rate'] = df[['curr_util_rate', 'exp_util_rate']].apply(self._get_rec, axis=1)
-            df['rec_disc'] = df['curr_disc'] * (1 + df['rec_disc_chg_rate'] / 100)
+            df['rec_disc'] = df['applied_disc'] * (1 + df['rec_disc_chg_rate'] / 100)
             df = df.drop(columns=['rec_disc_chg_rate'], errors='ignore')
             rec_output[model] = df
 
@@ -316,14 +348,12 @@ class DiscRecommend(object):
 
         return output_renamed
 
-    @staticmethod
-    def _save_result(output: dict, pred_day: str, apply_day: str):
+    def _save_result(self, output: dict, pred_day: str):
         df_merged = pd.DataFrame()
         for model, df in output.items():
             df_merged = pd.concat([df_merged, df], axis=1)
 
-        apply_day_str = ''.join(apply_day.split('/'))
-        save_path = os.path.join('..', 'result', 'data', 'recommend', 'lead_time', apply_day_str)
+        save_path = os.path.join('..', 'result', 'data', 'recommend', 'lead_time', self.apply_day_str)
 
         # Make directory
         if not os.path.exists(save_path):
@@ -360,10 +390,8 @@ class DiscRecommend(object):
 
         return summary_df
 
-    @staticmethod
-    def _save_summary_result(summary: dict, apply_day: str):
-        apply_day_str = ''.join(apply_day.split('/'))
-        save_path = os.path.join('..', 'result', 'data', 'recommend', 'summary', apply_day_str)
+    def _save_summary_result(self, summary: dict):
+        save_path = os.path.join('..', 'result', 'data', 'recommend', 'summary', self.apply_day_str)
 
         # Make directory
         if not os.path.exists(save_path):

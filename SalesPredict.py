@@ -22,7 +22,7 @@ class SalesPredict(object):
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
-    def __init__(self, res_update_day: str):
+    def __init__(self, res_update_day: str, disc_confirm_last_week: str):
         # Path of data & model
         self.path_input = os.path.join('..', 'input')
         self.path_trend_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
@@ -77,6 +77,7 @@ class SalesPredict(object):
         # Prediction variables
         # Initial values of variables
         self.res_update_day = res_update_day
+        self.disc_confirm_last_week = disc_confirm_last_week
         self.res_cnt_init: dict = {}
         self.res_util_init: dict = {}
         self.res_sales_init: dict = {}
@@ -156,6 +157,7 @@ class SalesPredict(object):
         print('Training finished')
 
     def predict(self, pred_days: list, apply_day: str):
+        apply_day_str = ''.join(apply_day.split('/'))
         # Load dataset
         self._load_hx()
 
@@ -180,8 +182,20 @@ class SalesPredict(object):
         # Change dictionary structure
         fitted = self._chg_dict_structure(fitted=fitted)
 
+        results_exp = {}
+        results_rec = {}
         for pred_day in pred_days:
-            self._pred(pred_day=pred_day, apply_day=apply_day, fitted_model=fitted)
+            sales_exp_final, sales_rec_final = self._pred(pred_day=pred_day, apply_day=apply_day, fitted_model=fitted)
+            for (model_exp, df_exp), (model_rec, df_rec) in zip(sales_exp_final.items(), sales_rec_final.items()):
+                results_exp[model_exp] = pd.concat([results_exp.get(model_exp, pd.DataFrame()), df_exp], axis=0)
+                results_rec[model_rec] = pd.concat([results_rec.get(model_rec, pd.DataFrame()), df_rec], axis=0)
+
+        save_path = os.path.join(self.path_sales_per_res, apply_day_str, 'summary')
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+        for (model_exp, df_exp), (model_rec, df_rec) in zip(results_exp.items(), results_rec.items()):
+            df_exp.T.to_csv(os.path.join(save_path, 'summary_exp_' + model_exp + '.csv'), header=False)
+            df_rec.T.to_csv(os.path.join(save_path, 'summary_rec_' + model_rec + '.csv'), header=False)
 
         print("Model 2 Prediction is finished")
 
@@ -286,8 +300,8 @@ class SalesPredict(object):
         self.res_data_hx = res_data_hx
 
     def _set_split_map(self):
-        split_map = {'cnt_inc': {'drop': 'cnt_add',
-                                 'target': 'cnt_add'},
+        split_map = {'cnt_inc': {'drop': 'cnt_rate',
+                                 'target': 'cnt_rate'},
                      'cnt_cum': {'drop': 'cnt_cum',
                                  'target': 'cnt_cum'},
                      'util_inc': {'drop': ['util_add', 'util_rate_add'],
@@ -393,7 +407,7 @@ class SalesPredict(object):
     ##################################
     def _set_pred_init_variables(self):
         self.day_to_season = self._get_seasonal_map()
-        self.disc_re = self._get_init_disc_map()
+        self.disc_re = self._get_disc_last_week(disc_confirm_last_week=self.disc_confirm_last_week)
         self.capa_re = self._get_init_capa()
         self.lt, self.lt_vec, self.lt_to_lt_vec = self._get_lead_time()
 
@@ -408,15 +422,18 @@ class SalesPredict(object):
         return day_to_season
 
     @staticmethod
-    def _get_init_disc_map():
-        # Initial discount rate for each season
-        load_path = os.path.join('..', 'input', 'discount')
-        dscnt_init = pd.read_csv(os.path.join(load_path, 'discount_init.csv'), delimiter='\t')
-        dscnt_init['date'] = pd.to_datetime(dscnt_init['date'], format='%Y%m%d')
-        day_to_init_discount = {day: discount for day, discount in zip(dscnt_init['date'],
-                                                                       dscnt_init['discount_init'])}
+    def _get_disc_last_week(disc_confirm_last_week: str):
+        # Initial capacity of each model
+        load_path = os.path.join('..', 'input', 'disc_complete')
+        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + disc_confirm_last_week + '.csv'),
+                                   delimiter='\t', dtype={'date': str, 'model': str, 'disc': int})
+        disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
 
-        return day_to_init_discount
+        disc_last_week = defaultdict(dict)
+        for date, model, disc in zip(disc_comfirm['date'], disc_comfirm['model'], disc_comfirm['disc']):
+            disc_last_week[date].update({model: disc})
+
+        return disc_last_week
 
     @staticmethod
     def _get_init_capa():
@@ -863,10 +880,24 @@ class SalesPredict(object):
         self._save_result(result=pred_sales_exp, pred_day=pred_day, apply_day=apply_day, kinds='exp')
         self._save_result(result=pred_sales_rec, pred_day=pred_day, apply_day=apply_day, kinds='rec')
 
-        # self._draw_trend_graph(exp=pred_sales_exp, rec=pred_sales_rec,
-        #                        pred_day=pred_day, apply_day=apply_day)
+        self._draw_trend_graph(exp=pred_sales_exp, rec=pred_sales_rec,
+                               pred_day=pred_day, apply_day=apply_day)
+
+        sales_exp_final = self._get_final_result(result=pred_sales_exp, pred_day=pred_day)
+        sales_rec_final = self._get_final_result(result=pred_sales_rec, pred_day=pred_day)
 
         print(f'Prediction result on {pred_day} is saved')
+        return sales_exp_final, sales_rec_final
+
+    def _get_final_result(self, result: dict, pred_day: str):
+        result_dict = {}
+        for model, df in result.items():
+            temp = pd.DataFrame({'rent_day': [pred_day],
+                                 'exp_fin_util': [df['exp_util'].iloc[-1]],
+                                 'exp_fin_sales': [df['exp_cum_sales'].iloc[-1]]})
+            result_dict[model] = temp
+
+        return result_dict
 
     def _draw_trend_graph(self, exp: dict, rec: dict, pred_day: str, apply_day: str):
         pred_day_str = ''.join(pred_day.split('-'))
@@ -875,16 +906,13 @@ class SalesPredict(object):
         fig_size = (9, 6)
         for (exp_key, exp_val), (rec_key, rec_val) in zip(exp.items(), rec.items()):
             # Figure setting
-            fig, axes = plt.subplots(3, 1)
+            fig, axes = plt.subplots(2, 1)
             cor_exp = '#3a18b1'
             cor_exp_exp = '#045c5a'
             cor_rec = '#9d0216'
             cor_rec_exp = '#fb5581'
 
             # Dataframe setting
-            exp_sales = exp_val['exp_cum_sales'].iloc[-1]
-            rec_sales = rec_val['exp_cum_sales'].iloc[-1]
-
             exp_val = exp_val.set_index('lead_time', drop=True)
             rec_val = rec_val.set_index('lead_time', drop=True)
 
@@ -902,32 +930,32 @@ class SalesPredict(object):
             axes[0].legend()
 
             # Reservation Utilization Graph
-            exp_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                      color=cor_exp, label='가동률(exp)', ax=axes[1])
-            exp_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                          color=cor_exp_exp, label='기대 가동률(exp)', ax=axes[1])
-            rec_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                      color=cor_rec, label='가동률(rec)', ax=axes[1])
-            rec_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                          color=cor_rec_exp, label='기대 가동률(rec)', ax=axes[1])
+            # exp_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+            #                           color=cor_exp, label='가동률(exp)', ax=axes[1])
+            # exp_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+            #                               color=cor_exp_exp, label='기대 가동률(exp)', ax=axes[1])
+            # rec_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+            #                           color=cor_rec, label='가동률(rec)', ax=axes[1])
+            # rec_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+            #                               color=cor_rec_exp, label='기대 가동률(rec)', ax=axes[1])
+            # axes[1].set_xlabel('리드타임')
+            # axes[1].set_ylabel('%')
+            # axes[1].legend()
+
+            # Reservation Discount Graph
+            exp_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                      color=cor_exp, label='할인율(exp)', ax=axes[1])
+            exp_val['exp_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                          color=cor_exp_exp, label='기대 할인율(exp)', ax=axes[1])
+            rec_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                      color=cor_rec, label='할인율(rec)', ax=axes[1])
+            rec_val['rec_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
+                                          color=cor_rec_exp, label='추천 할인율(rec)', ax=axes[1])
             axes[1].set_xlabel('리드타임')
             axes[1].set_ylabel('%')
             axes[1].legend()
 
-            # Reservation Discount Graph
-            exp_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                      color=cor_exp, label='할인율(exp)', ax=axes[2])
-            exp_val['exp_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                          color=cor_exp_exp, label='기대 할인율(exp)', ax=axes[2])
-            rec_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                      color=cor_rec, label='할인율(rec)', ax=axes[2])
-            rec_val['rec_disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-                                          color=cor_rec_exp, label='추천 할인율(rec)', ax=axes[2])
-            axes[2].set_xlabel('리드타임')
-            axes[2].set_ylabel('%')
-            axes[2].legend()
-
-            plt.suptitle(f'Exp. Sales: {exp_sales} / Rec. Sales: {rec_sales}')
+            # plt.suptitle(f'Exp. Sales: {exp_sales} / Rec. Sales: {rec_sales}')
 
             # Save images
             save_path = os.path.join(self.path_sales_per_res, apply_day_str, 'img', pred_day_str)

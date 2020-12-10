@@ -15,35 +15,25 @@ class ResPredict(object):
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
-    def __init__(self, res_status_ud_day: str):
+    def __init__(self, res_update_day: str):
         # Path of data & model
         self.path_data_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx')
-        self.path_model = os.path.join('..', 'result', 'model', 'res_prediction')
+        self.path_model = os.path.join('..', 'result', 'model', 'model_2')
 
-        # Data Type
-        self.data_type: list = ['cnt', 'disc', 'util']
-        self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
-
-        # Model type
-        self.grade_1_6 = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
-                          'ALL NEW K3 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
-        self.model_type: list = ['av', 'k3', 'su', 'vl']
-        self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
-        self.model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
-                             'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
-        self.detail_type: dict = {'model': self.model_type, 'car': self.car_type}
-
-        # Data preprocessing hyper-parameter
         self.random_state = 2020
         self.test_size = 0.2
+        self.data_type: list = ['cnt', 'disc', 'util']
+        self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
+        self.model_type: list = ['av', 'k3', 'vl', 'su']
+        self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
 
         # Prediction variables
         # Initial values of variables
-        self.res_status_ud_day = res_status_ud_day
-        self.res_rate_re: dict = {}
+        self.res_update_day = res_update_day
+        self.res_cnt_re: dict = {}
         self.season_re: dict = {}
-        self.disc_last_week: dict = {}
-        self.capacity_re: dict = {}
+        self.disc_re: dict = {}
+        self.capa_re: dict = {}
         self.avg_unavail_capa = 2
 
         # Lead time
@@ -57,7 +47,6 @@ class ResPredict(object):
         self.param_grids = dict()
 
     def train(self, model_detail: str):
-        detail_type = self.detail_type[model_detail]
         # Load dataset
         self.data_map = self._load_data(model_detail=model_detail)
 
@@ -65,7 +54,7 @@ class ResPredict(object):
         self.split_map = self._set_split_map()
 
         # Split into input and output
-        m2_io = self._split_input_target_all(detail_type=detail_type)
+        m2_io = self._split_input_target_all()
 
         # Split dataset into train and test dataset
         m2 = self._split_train_test_all(data=m2_io)
@@ -81,13 +70,11 @@ class ResPredict(object):
         extr_bests = self._grid_search_cross_validation(data=m2, regr='Extra Trees Regressor')
 
         # Save best parameter grid
-        self._save_best_params(regr='extr', regr_bests=extr_bests, model_detail=model_detail)
+        self._save_best_params(regr='extr', regr_bests=extr_bests)
 
         print('Training finished')
 
-    def predict(self, pred_days: list, apply_day: str, disc_confirm_last_week: str, model_detail: str):
-        detail_type = self.detail_type[model_detail]
-
+    def predict(self, pred_days: list, model_detail: str):
         # Load dataset
         self.data_map = self._load_data(model_detail=model_detail)
 
@@ -95,20 +82,19 @@ class ResPredict(object):
         self.split_map = self._set_split_map()
 
         # Split into input and output
-        m2_io = self._split_input_target_all(detail_type=detail_type)
+        m2_io = self._split_input_target_all()
 
         # Set initial variables
-        self._set_recent_dataset(disc_confirm_last_week=disc_confirm_last_week,
-                                 model_detail=model_detail)
+        self._set_recent_dataset()
 
         # Load best hyper-parameters
-        extr_bests = self._load_best_params(regr='extr', model_detail=model_detail)
+        extr_bests = self._load_best_params(regr='extr')
 
         # fit the model
         fitted = self._fit_model(dataset=m2_io, regr='extr', params=extr_bests)
 
         for pred_day in pred_days:
-            self._pred(pred_day=pred_day, apply_day=apply_day, fitted_model=fitted, detail_type=detail_type)
+            self._pred(pred_day=pred_day, fitted_model=fitted)
 
         print('')
         print("Model 2 Prediction is finished")
@@ -118,13 +104,19 @@ class ResPredict(object):
     # 2. Data & Variable Initialization
     ####################################
     def _load_data(self, model_detail: str):
-        detail_type = self.detail_type[model_detail]
         data_map = defaultdict(dict)
-        for data_type in self.data_type:    # cnt / disc / util
-            for model in detail_type:
-                data_type_name = self.data_type_map[data_type]
-                data_map[data_type].update({model: pd.read_csv(os.path.join(self.path_data_hx, model_detail,
-                                            data_type_name, data_type_name + '_' + model + '.csv'))})
+        if model_detail == 'model':
+            for data_type in self.data_type:        # cnt / disc / util
+                for model in self.model_type:       # av / k3 / su / vl
+                    data_type_name = self.data_type_map[data_type]
+                    data_map[data_type].update({model: pd.read_csv(os.path.join(self.path_data_hx, model_detail,
+                                                data_type_name, data_type_name + '_' + model + '.csv'))})
+        elif model_detail == 'car':
+            for data_type in self.data_type:    # cnt / disc / util
+                for model in self.car_type:     # av_ad / av_new / k3 / soul / vlst
+                    data_type_name = self.data_type_map[data_type]
+                    data_map[data_type].update({model: pd.read_csv(os.path.join(self.path_data_hx, model_detail,
+                                                data_type_name, data_type_name + '_' + model + '.csv'))})
 
         return data_map
 
@@ -142,11 +134,11 @@ class ResPredict(object):
     ##################################
     # 2. Data Preprcessing
     ##################################
-    def _split_input_target_all(self, detail_type: list):
+    def _split_input_target_all(self):
         io = {}
         for data_type in self.data_type:
             io_model = {}
-            for model in detail_type:
+            for model in self.model_type:
                 split = self._split_to_input_target(data_type=data_type, model=model)
                 io_model[model] = split
             io[data_type] = io_model
@@ -224,32 +216,33 @@ class ResPredict(object):
 
         return regressor
 
-    def _save_best_params(self, regr: str, regr_bests: dict, model_detail: str):
+    def _save_best_params(self, regr: str, regr_bests: dict):
         for type_key, type_val in regr_bests.items():
             for model_key, model_val in type_val.items():
                 best_params = model_val.get_params()
-                f = open(os.path.join(self.path_model, model_detail, type_key,
-                                      regr + '_params_' + model_key + '.pickle'), 'wb')
+                f = open(os.path.join(self.path_model, type_key, regr + '_params_' + model_key + '.pickle'), 'wb')
                 pickle.dump(best_params, f)
                 f.close()
 
     ##################################
     # 4. Prediction
     ##################################
-    def _pred(self, pred_day: str, apply_day: str, fitted_model: dict, detail_type: list):
+    def _pred(self, pred_day: str, fitted_model: dict):
         # Get season value and initial discount rate
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
-        apply_day_str = ''.join(apply_day.split('/'))
         season = self.season_re[pred_datetime]
-        init_disc = self.disc_last_week[pred_datetime]
-        init_capa = self.capacity_re[pred_datetime]
+        init_disc = self.disc_re[pred_datetime]
+
+        # Set initial capacity of model
+        init_capa = {'av': self.capa_re[(pred_datetime, 'AVANTE')] - self.avg_unavail_capa,
+                     'k3': self.capa_re[(pred_datetime, 'K3')] - self.avg_unavail_capa,
+                     'vl': self.capa_re[(pred_datetime, 'VELOSTER')] - self.avg_unavail_capa,
+                     'su': self.capa_re[(pred_datetime, 'SOUL')] - self.avg_unavail_capa}
 
         # Make initial values dataframe
-        pred_input = self._get_pred_input(pred_day=pred_day, season=season, init_disc=init_disc,
-                                          detail_type=detail_type)
+        pred_input = self._get_pred_input(season=season, init_disc=init_disc, pred_day=pred_day)
 
-        pred_result = self._pred_fitted_model(pred_datetime=pred_datetime, pred_input=pred_input,
-                                              fitted_model=fitted_model)
+        pred_result = self._pred_fitted_model(pred_input=pred_input, fitted_model=fitted_model)
 
         # Map lead time to prediction results
         lt_to_pred_result = self._get_lt_to_pred_result(pred_result=pred_result)
@@ -261,37 +254,37 @@ class ResPredict(object):
                                             init_disc=init_disc, init_capa=init_capa)
 
         # Save the result dataframe
-        self._save_result(result=result_df, pred_day=pred_day, apply_day=apply_day_str)
+        self._save_result(result=result_df, pred_day=pred_day)
 
         print(f'Prediction result on {pred_day} is saved')
 
-    def _get_pred_input(self, pred_day: str, season: int, init_disc: dict,  detail_type: list):
-        pred_datetime = dt.datetime.strptime(pred_day, '%Y-%m-%d')
+    def _get_pred_input(self, season: int, init_disc: int, pred_day: str):
         pred_input = {}
         for data_type in self.data_type:
             input_model = {}
-            for model in detail_type:
+            for model in self.model_type:
                 if data_type in ['cnt', 'util']:
-                    input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec,
-                                                       'discount': init_disc[model]})
+                    input_model[model] = pd.DataFrame({'season': season,
+                                                       'lead_time': self.lt_vec,
+                                                       'discount': init_disc})
                 else:
                     input_model[model] = pd.DataFrame({'season': season, 'lead_time': self.lt_vec,
-                                                       'res_cnt': self.res_rate_re[pred_datetime].get(model, 0)})
+                                                       'res_cnt': self.res_cnt_re[pred_day].get(model, 0)})
             pred_input[data_type] = input_model
 
         return pred_input
 
-    def _set_recent_dataset(self, disc_confirm_last_week: str, model_detail: str):
-        self.capacity_re = self._get_capa_re(model_detail=model_detail)
-        self.res_rate_re = self._get_res_rate_re(model_detail=model_detail)
+    def _set_recent_dataset(self):
+        self.res_cnt_re = self._get_res_cnt_re()
         self.season_re = self._get_seasonal_map()
-        self.disc_last_week = self._get_disc_last_week(disc_confirm_last_week=disc_confirm_last_week)
+        self.disc_re = self._get_disc_re()
+        self.capa_re = self._get_capa_re()
         self.lt, self.lt_vec, self.lt_to_lt_vec = self._get_lead_time()
 
-    def _get_res_rate_re(self, model_detail: str):
+    def _get_res_cnt_re(self):
         # Load recent reservation dataset
         load_path = os.path.join('..', 'input', 'res_status')
-        res_re = pd.read_csv(os.path.join(load_path, 'res_' + self.res_status_ud_day + '.csv'), delimiter='\t')
+        res_re = pd.read_csv(os.path.join(load_path, 'res_' + self.res_update_day + '.csv'), delimiter='\t')
 
         res_remap_cols = {
             '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
@@ -304,7 +297,6 @@ class ResPredict(object):
             '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
         res_re = res_re.rename(columns=res_remap_cols)
 
-        # Drop unnecessary columns
         res_drop_col = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'tot_fee',
                         'res_model', 'car_grd', 'rent_time', 'return_day', 'return_time', 'rent_period_day',
                         'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm', 'sale_purpose',
@@ -315,67 +307,35 @@ class ResPredict(object):
         res_re['res_day'] = pd.to_datetime(res_re['res_day'], format='%Y-%m-%d')
 
         # filter only 1.6 grade car group
-        res_re = res_re[res_re['res_model_nm'].isin(self.grade_1_6)]
+        res_re = res_re[res_re['res_model_nm'].isin([
+            'ALL NEW K3 (G)',
+            '아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
+            '더 올 뉴 벨로스터 (G)', '쏘울 (G)', '쏘울 부스터 (G)'
+        ])]
 
         # Car Model group
-        self._cluster_by_group(df=res_re, group=model_detail)
+        # SOUL 모델은 VELOSTER 모델에 포함해서 분석 (실적 데이터가 적음)
+        conditions = [
+            res_re['res_model_nm'].isin(['ALL NEW K3 (G)']),
+            res_re['res_model_nm'].isin(['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']),
+            res_re['res_model_nm'].isin(['더 올 뉴 벨로스터 (G)']),
+            res_re['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)'])
+        ]
+        values = ['k3', 'av', 'vl', 'su']
+        res_re['res_model_grp'] = np.select(conditions, values)
 
         res_re = res_re.drop(columns=['res_model_nm'], errors='ignore')
         res_re = res_re.sort_values(by=['rent_day', 'res_day'])
 
-        res_cnt = res_re.groupby(by=['rent_day', 'model']).count()['res_num']
+        res_cnt = res_re.groupby(by=['rent_day', 'res_model_grp']).count()['res_num']
         res_cnt = res_cnt.reset_index(level=(0, 1))
 
-        res_cnt = self._add_capacity(df=res_cnt)
-
-        res_cnt['res_rate'] = res_cnt['res_num'] / res_cnt['capa']
-
         res_curr_dict = defaultdict(dict)
-        for day, model, cnt in zip(res_cnt['rent_day'], res_cnt['model'], res_cnt['res_rate']):
-            res_curr_dict[day].update({model: cnt})
+        for day, model, cnt in zip(res_cnt['rent_day'], res_cnt['res_model_grp'], res_cnt['res_num']):
+            day_str = day.strftime('%Y-%m-%d')
+            res_curr_dict[day_str].update({model: cnt})
 
         return res_curr_dict
-
-    def _add_capacity(self, df: pd.DataFrame):
-        df['capa'] = df[['rent_day', 'model']].apply(self._set_capa, axis=1)
-
-        return df
-
-    def _set_capa(self, x):
-        return self.capacity_re[x[0]][x[1]]
-
-    def _cluster_by_group(self, df: pd.DataFrame, group: str):
-        conditions = []
-        values = []
-        if group == 'car':
-            av_ad = ['아반떼 AD (G)', '아반떼 AD (G) F/L']
-            k3 = ['ALL NEW K3 (G)']
-            soul = ['쏘울 (G)', '쏘울 부스터 (G)']
-
-            conditions = [
-                df['res_model_nm'].isin(av_ad),
-                df['res_model_nm'] == '올 뉴 아반떼 (G)',
-                df['res_model_nm'].isin(k3),
-                df['res_model_nm'].isin(soul),
-                df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
-            values = self.car_type
-
-        elif group == 'model':
-            av = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)']
-            k3 = ['ALL NEW K3 (G)']
-            vl = ['더 올 뉴 벨로스터 (G)']
-            su = ['쏘울 (G)', '쏘울 부스터 (G)']
-
-            conditions = [
-                df['res_model_nm'].isin(av),
-                df['res_model_nm'].isin(k3),
-                df['res_model_nm'].isin(su),
-                df['res_model_nm'].isin(vl)]
-            values = self.model_type
-
-        df['model'] = np.select(conditions, values)
-
-        return df
 
     @staticmethod
     def _get_seasonal_map():
@@ -387,35 +347,32 @@ class ResPredict(object):
 
         return day_to_season
 
-    def _get_disc_last_week(self, disc_confirm_last_week: str):
-        # Initial capacity of each model
-        load_path = os.path.join('..', 'input', 'disc_complete')
-        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + disc_confirm_last_week + '.csv'),
-                                   delimiter='\t', dtype={'date': str, 'model': str, 'disc': int})
-        disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
+    @staticmethod
+    def _get_disc_re():
+        # Initial discount rate for each season
+        load_path = os.path.join('..', 'input', 'discount')
+        dscnt_init = pd.read_csv(os.path.join(load_path, 'discount_init.csv'), delimiter='\t')
+        dscnt_init['date'] = pd.to_datetime(dscnt_init['date'], format='%Y%m%d')
+        day_to_init_discount = {day: discount for day, discount in zip(dscnt_init['date'],
+                                                                       dscnt_init['discount_init'])}
 
-        disc_last_week = defaultdict(dict)
-        for date, model, disc in zip(disc_comfirm['date'], disc_comfirm['model'], disc_comfirm['disc']):
-            disc_last_week[date].update({self.model_nm_map[model]: disc})
+        return day_to_init_discount
 
-        return disc_last_week
-
-    def _get_capa_re(self, model_detail: str):
+    def _get_capa_re(self):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_re = pd.read_csv(os.path.join(load_path, 'capa_curr_' + model_detail + '.csv'), delimiter='\t',
+        capa_init = pd.read_csv(os.path.join(load_path, 'capa_curr_model.csv'), delimiter='\t',
                                 dtype={'date': str, 'model': str, 'capa': int})
-        capa_init_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_' + model_detail + '.csv'),
-                                        delimiter='\t')
+        capa_init_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_model.csv'), delimiter='\t')
 
-        capa_re = self._conv_mon_to_day(df=capa_re, end_day='28')
-        capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_init_unavail)
+        capa_init = self._conv_mon_to_day(df=capa_init, end_day='28')
+        capa_init = self._apply_unavail_capa(capa=capa_init, capa_unavail=capa_init_unavail)
 
-        capa_re_dict = defaultdict(dict)
-        for date, model, capa in zip(capa_re['date'], capa_re['model'], capa_re['capa']):
-            capa_re_dict[date].update({self.model_nm_map[model]: capa - self.avg_unavail_capa})
+        capa_init_dict = {(date, model): capa for date, model, capa in zip(capa_init['date'],
+                                                                           capa_init['model'],
+                                                                           capa_init['capa'])}
 
-        return capa_re_dict
+        return capa_init_dict
 
     @staticmethod
     def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
@@ -449,14 +406,12 @@ class ResPredict(object):
 
         return lt, lt_vec, lt_to_lt_vec
 
-    def _load_best_params(self, regr: str, model_detail: str):
-        detail_type = self.detail_type[model_detail]
+    def _load_best_params(self, regr: str):
         regr_bests = {}
         for data_type in self.data_type:
             model_bests = {}
-            for model in detail_type:
-                f = open(os.path.join(self.path_model, model_detail, data_type,
-                                      regr + '_params_' + model + '.pickle'), 'rb')
+            for model in self.model_type:
+                f = open(os.path.join(self.path_model, data_type, regr + '_params_' + model + '.pickle'), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
             regr_bests[data_type] = model_bests
@@ -476,15 +431,15 @@ class ResPredict(object):
 
         return fitted
 
-    def _pred_fitted_model(self, pred_datetime, pred_input: dict, fitted_model: dict):
+    @staticmethod
+    def _pred_fitted_model(pred_input: dict, fitted_model: dict):
         pred_results = {}
         for type_key, type_val in fitted_model.items():
             pred_models = {}
             for model_key, model_val in type_val.items():
                 pred = model_val.predict(pred_input[type_key][model_key])
-                if type_key == 'cnt':
-                    capa = self.capacity_re[pred_datetime][model_key]
-                    pred = np.round(pred * capa, 1)
+                if (type_key == 'cnt') or (type_key == 'disc'):
+                    pred = np.round(pred, 1)
                 else:
                     pred = np.round(pred, 3)
                 pred_models[model_key] = pred
@@ -513,13 +468,14 @@ class ResPredict(object):
         return result
 
     def _conv_to_dataframe(self, result: dict, pred_datetime: dt.datetime,
-                           init_disc: dict, init_capa: dict):
+                           init_disc: int, init_capa: dict):
         date = [pred_datetime - dt.timedelta(days=int(i*-1)) for i in self.lt]
         lead_time = self.lt
+        curr_disc = init_disc
 
         model_df = {}
         for model_key, model_val in result.items():
-            df = pd.DataFrame({'date': date, 'lead_time': lead_time, 'curr_disc': init_disc[model_key]})
+            df = pd.DataFrame({'date': date, 'lead_time': lead_time, 'curr_disc': curr_disc})
             for type_key, type_val in model_val.items():
                 df['exp_' + type_key] = type_val
 
@@ -530,12 +486,8 @@ class ResPredict(object):
         return model_df
 
     @staticmethod
-    def _save_result(result: dict, pred_day: str, apply_day: str):
-        save_path = os.path.join('..', 'result', 'data', 'prediction', apply_day)
-        if not os.path.exists(save_path):
-            os.mkdir(save_path)
+    def _save_result(result: dict, pred_day: str):
+        save_path = os.path.join('..', 'result', 'data', 'prediction')
         for model_key, model_val in result.items():
-            save_model_path = os.path.join(save_path, model_key)
-            if not os.path.exists(save_model_path):
-                os.mkdir(save_model_path)
-            model_val.to_csv(os.path.join(save_model_path, 'res_pred(' + pred_day + ').csv'), index=False)
+            model_val.to_csv(os.path.join(save_path, model_key,
+                                          'm2_pred(' + pred_day + ').csv'), index=False)

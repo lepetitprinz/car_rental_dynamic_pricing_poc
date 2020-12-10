@@ -22,25 +22,30 @@ class DataPrep(object):
         self.capa_re_car: pd.DataFrame = pd.DataFrame()
         self.capa_re_model: pd.DataFrame = pd.DataFrame()
 
-        self.capa: dict = dict()
+        self.capacity_hx: dict = dict()
         # car grade
-        self.grade_1_6 = ['ALL NEW K3 (G)', '아반떼 AD (G)', '아반떼 AD (G) F/L',
-                          '올 뉴 아반떼 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
+        self.grade_1_6 = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
+                          'ALL NEW K3 (G)',
+                          '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
 
     def prep_res_hx(self):
         # Make reservation history dataset
-        # self._make_res_hx()
+        self._make_res_hx()
 
         # Load and set data
-        res_hx = self._load_hx_dataset()
+        res_hx = self._load_res_hx()
+        self.season_hx = self._get_season_hx()
+        self.capa_hx_model, self.capa_hx_car = self._get_caap_hx()
+        self.capacity_hx = {'hx': {'model': self.capa_hx_model,
+                                   'car': self.capa_hx_car}}
 
         # Filter models
         res_hx = res_hx[res_hx['res_model_nm'].isin(self.grade_1_6)]
         res_hx = res_hx.reset_index(drop=True)
 
         # Change data types
-        res_hx['rent_day'] = self._to_datetime(res_hx['rent_day'])
-        res_hx['res_day'] = self._to_datetime(res_hx['res_day'])
+        res_hx['rent_day'] = pd.to_datetime(res_hx['rent_day'], format='%Y-%m-%d')
+        res_hx['res_day'] = pd.to_datetime(res_hx['res_day'], format='%Y-%m-%d')
         res_hx['discount'] = res_hx['discount'].astype(int)
 
         # Data preprocessing: by car
@@ -51,7 +56,12 @@ class DataPrep(object):
 
     def prep_res_recent(self, status_update_day: str):
         # Load ad set recent reservation dataset
-        res_re = self._load_recent_dataset(update_day=status_update_day)
+        res_re = self._load_res_re(update_day=status_update_day)
+
+        self.season_re = self._get_season_re()
+        self.capa_re_model, self.capa_re_car = self._get_capa_re()
+        self.capacity_hx = {'re': {'model': self.capa_re_model,
+                                   'car': self.capa_re_car}}
 
         # Rename columns
         res_re = self._rename_col_res_recent(df=res_re)
@@ -77,7 +87,7 @@ class DataPrep(object):
         self._prep_by_group(df=res_re, group='model', time='re')
 
     # Methods for load dataset (History / Recent)
-    def _load_hx_dataset(self):
+    def _load_res_hx(self):
         # Load reservation history
         res_hx = pd.read_csv(os.path.join(self.load_path, 'res_status', 'res_hx.csv'),
                              dtype={'res_num': str, 'res_route_nm': str, 'res_model_nm': str, 'rent_day': str,
@@ -85,42 +95,44 @@ class DataPrep(object):
                                     'cdw_fee': int, 'tot_fee': int, 'discount': float, 'res_day': str,
                                     'seasonality': int})
 
+        return res_hx
+
+    def _get_season_hx(self):
         # Load seasonality history
         season_hx = pd.read_csv(os.path.join(self.load_path, 'seasonality', 'seasonality_hx.csv'), delimiter='\t')
         season_hx['rent_day'] = pd.to_datetime(season_hx['rent_day'], format='%Y-%m-%d')
-        self.season_hx = season_hx
+        return season_hx
 
+    def _get_caap_hx(self):
         # Load capacity history of car models
-        capa_hx_path = os.path.join('..', 'input', 'capa')
-
         # Capacity of models
+        capa_hx_path = os.path.join('..', 'input', 'capa')
         capa_hx_model = pd.read_csv(os.path.join(capa_hx_path, 'capa_hx_model.csv'), delimiter='\t',
                                     dtype={'date': str, 'model': str, 'capa': int})
         capa_hx_model = self._conv_mon_to_day_hx(df=capa_hx_model)
-        self.capa_hx_model = {(date, model): capa for date, model, capa in zip(capa_hx_model['date'],
-                                                                               capa_hx_model['model'],
-                                                                               capa_hx_model['capa'])}
+        capa_hx_model = {(date, model): capa for date, model, capa in zip(capa_hx_model['date'],
+                                                                          capa_hx_model['model'],
+                                                                          capa_hx_model['capa'])}
 
         # Capacity of cars
         capa_hx_car = pd.read_csv(os.path.join(capa_hx_path, 'capa_hx_car.csv'), delimiter='\t',
                                   dtype={'date': str, 'model': str, 'capa': int})
         capa_hx_car = self._conv_mon_to_day_hx(df=capa_hx_car)
-        self.capa_hx_car = {(date, model): capa for date, model, capa in zip(capa_hx_car['date'],
+        capa_hx_car = {(date, model): capa for date, model, capa in zip(capa_hx_car['date'],
                                                                              capa_hx_car['model'],
                                                                              capa_hx_car['capa'])}
-        self.capa = {'hx': {'model': self.capa_hx_model,
-                            'car': self.capa_hx_car}}
 
-        return res_hx
+        return capa_hx_model, capa_hx_car
 
-    def _load_recent_dataset(self, update_day: str):
+    def _get_season_re(self):
         # Seasonal dataset
         data_path = os.path.join('..', 'input', 'seasonality', 'seasonality_curr.csv')
         season_recent = pd.read_csv(data_path, delimiter='\t', dtype={'date': str, 'seasonality': int})
         season_recent = season_recent.rename(columns={'date': 'rent_day'})
         season_recent['rent_day'] = pd.to_datetime(season_recent['rent_day'], format='%Y-%m-%d')
-        self.season_re = season_recent
+        return season_recent
 
+    def _get_capa_re(self):
         # Capacity of models
         data_path = os.path.join('..', 'input', 'capa')
         capa_re_model = pd.read_csv(os.path.join(data_path, 'capa_curr_model.csv'), delimiter='\t',
@@ -129,7 +141,7 @@ class DataPrep(object):
         capa_re_model = self._conv_mon_to_day(df=capa_re_model, end_day='28')
         capa_re_model = self._apply_unavail_capa(capa=capa_re_model, capa_unavail=capa_re_unavail_model)
 
-        self.capa_re_model = {(date, model): capa for date, model, capa in zip(capa_re_model['date'],
+        capa_re_model = {(date, model): capa for date, model, capa in zip(capa_re_model['date'],
                                                                                capa_re_model['model'],
                                                                                capa_re_model['capa'])}
         capa_re_car = pd.read_csv(os.path.join(data_path, 'capa_curr_car.csv'), delimiter='\t',
@@ -138,13 +150,13 @@ class DataPrep(object):
         capa_re_car = self._conv_mon_to_day(df=capa_re_car, end_day='28')
         capa_re_car = self._apply_unavail_capa(capa=capa_re_car, capa_unavail=capa_re_unavail_car)
 
-        self.capa_re_car = {(date, model): capa for date, model, capa in zip(capa_re_car['date'],
+        capa_re_car = {(date, model): capa for date, model, capa in zip(capa_re_car['date'],
                                                                              capa_re_car['model'],
                                                                              capa_re_car['capa'])}
 
-        self.capa = {'re': {'model': self.capa_re_model,
-                            'car': self.capa_re_car}}
+        return capa_re_model, capa_re_car
 
+    def _load_res_re(self, update_day: str):
         # Recent reservation dataset
         data_path = os.path.join('..', 'input', 'res_status', 'res_' + update_day + '.csv')
         data_type = {'예약경로': int, '예약경로명': str, '계약번호': int, '고객구분': int, '고객구분명': str,
@@ -493,7 +505,7 @@ class DataPrep(object):
         return df
 
     def _set_capa(self, x, time, group):
-        return self.capa[time][group][(x[0], x[1])]
+        return self.capacity_hx[time][group][(x[0], x[1])]
 
     def _add_capacity(self, df: pd.DataFrame, group: str, time: str):
         # util['month'] = util['rent_day'].dt.strftime('%Y%m')
@@ -612,9 +624,9 @@ class DataPrep(object):
         res_hx_20 = self._rename_col_hx(res_hx=res_hx_20)
 
         # Chnage data types
-        res_hx_17_19['rent_day'] = self._to_datetime(arr=res_hx_17_19['rent_day'])
-        res_hx_20['rent_day'] = self._to_datetime(arr=res_hx_20['rent_day'])
-        season_hx['rent_day'] = self._to_datetime(arr=season_hx['rent_day'])
+        res_hx_17_19['rent_day'] = pd.to_datetime(res_hx_17_19['rent_day'], format='%Y-%m-%d')
+        res_hx_20['rent_day'] = pd.to_datetime(res_hx_20['rent_day'], format='%Y-%m-%d')
+        season_hx['rent_day'] = pd.to_datetime(season_hx['rent_day'], format='%Y-%m-%d')
 
         # Filter timestamp
         res_hx_18_19 = res_hx_17_19[(res_hx_17_19['rent_day'] >= dt.datetime(2018, 1, 1)) &
@@ -668,10 +680,6 @@ class DataPrep(object):
             '적용할인율(%)': 'discount', '생성일': 'res_day'}
 
         return res_hx.rename(columns=rename_col_res_hx)
-
-    @staticmethod
-    def _to_datetime(arr: pd.Series):
-        return pd.to_datetime(arr, format='%Y-%m-%d')
 
     @staticmethod
     def _merge_data_hx(concat_list: list, merge_df: pd.DataFrame):

@@ -58,34 +58,39 @@ def model_1(start_date: str, end_date: str, n_test: int, pred_step: int):
 
 
 # Model 2
-def model_2(start_date: str, end_date: str, res_update_day: str):
+def model_2(start_date: str, end_date: str, apply_day: str,
+            res_status_ud_day: str, disc_confirm_last_week: str, model_detail: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
-    model = ResPredict(res_update_day=res_update_day)
+    model = ResPredict(res_status_ud_day=res_status_ud_day)
 
     # Train
-    model.train(model_detail='model')
+    # model.train(model_detail=model_detail)
 
     # Prediction
-    model.predict(pred_days=pred_days, model_detail='model')
+    model.predict(pred_days=pred_days, apply_day=apply_day,
+                  disc_confirm_last_week=disc_confirm_last_week, model_detail=model_detail)
 
 
 # Model 3
-def model_3(start_date: str, end_date: str, apply_day: str, res_update_day: str):
+def model_3(start_date: str, end_date: str, apply_day: str, res_update_day: str,
+            disc_confirm_last_week: str, model_detail: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
-    model = DiscRecommend(res_update_day=res_update_day)
-    model.rec(pred_days=pred_days, apply_day=apply_day)
+    model = DiscRecommend(res_update_day=res_update_day, apply_day=apply_day, model_detail=model_detail,
+                          disc_confirm_last_week=disc_confirm_last_week)
+    model.rec(pred_days=pred_days)
 
-
-def model_sales_pred(start_date: str, end_date: str, apply_day: str, res_update_day: str):
+def model_sales_pred(start_date: str, end_date: str, apply_day: str,
+                     res_update_day: str, disc_confirm_last_week: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
     # Predict reservation changing trend
-    pred_sales = SalesPredict(res_update_day=res_update_day)
+    pred_sales = SalesPredict(res_update_day=res_update_day,
+                              disc_confirm_last_week=disc_confirm_last_week)
     # pred_sales.data_preprocessing()
     # pred_sales.train()
     pred_sales.predict(pred_days=pred_days, apply_day=apply_day)
@@ -108,6 +113,7 @@ def weekly_report(res_status_last_week: str, res_status_this_week: str, res_stat
                              start_day=start_day, end_day=end_day,
                              apply_last_week=apply_last_week,
                              apply_this_week=apply_this_week)
+
     # post_proc.post_process()
     post_proc.calc_sales(res_confirm_day_from=res_confirm_day_from,
                          res_confirm_day_to=res_confirm_day_to,
@@ -155,32 +161,38 @@ def main():
     # Model 2
     # model_2(start_date=start_date,
     #         end_date=end_date,
-    #         res_update_day=res_status_ud_day)
+    #         apply_day=apply_day,
+    #         res_status_ud_day=res_status_ud_day,
+    #         disc_confirm_last_week=disc_confirm_last_week,
+    #         model_detail='car')
 
     # Model 3
-    # model_3(start_date=start_date,
-    #         end_date=end_date,
-    #         apply_day=apply_day,
-    #         res_update_day=res_status_ud_day)
+    model_3(start_date=start_date,
+            end_date=end_date,
+            apply_day=apply_day,
+            res_update_day=res_status_ud_day,
+            disc_confirm_last_week=disc_confirm_last_week,
+            model_detail='car')
 
     # Sales Prediction
     # model_sales_pred(start_date=start_date,
     #                  end_date=end_date,
     #                  apply_day=apply_day,
-    #                  res_update_day=res_status_ud_day)
+    #                  res_update_day=res_status_ud_day,
+    #                  disc_confirm_last_week=disc_confirm_last_week)
 
     # Data Post Processing
-    weekly_report(res_status_last_week=res_status_last_week,
-                  res_status_this_week=res_status_this_week,
-                  res_status_cancel_this_week=res_status_cancel_this_week,
-                  res_confirm_last_week=res_confirm_last_week,
-                  disc_confirm_last_week=disc_confirm_last_week,
-                  disc_rec_last_week=disc_rec_last_week,
-                  start_day=start_day, end_day=end_day,
-                  apply_last_week=apply_last_week,
-                  apply_this_week=apply_this_week,
-                  res_confirm_day_from=res_confirm_day_from,
-                  res_confirm_day_to=res_confirm_day_to)
+    # weekly_report(res_status_last_week=res_status_last_week,
+    #               res_status_this_week=res_status_this_week,
+    #               res_status_cancel_this_week=res_status_cancel_this_week,
+    #               res_confirm_last_week=res_confirm_last_week,
+    #               disc_confirm_last_week=disc_confirm_last_week,
+    #               disc_rec_last_week=disc_rec_last_week,
+    #               start_day=start_day, end_day=end_day,
+    #               apply_last_week=apply_last_week,
+    #               apply_this_week=apply_this_week,
+    #               res_confirm_day_from=res_confirm_day_from,
+    #               res_confirm_day_to=res_confirm_day_to)
 
 
 # Run main function
