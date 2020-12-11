@@ -328,7 +328,6 @@ class WeeklyReport(object):
                                       (res_confirmed['rent_day'] <= end_day_dt)]
         res_confirmed_last_week = res_confirmed[res_confirmed['res_day'] < apply_last_week_dt]
 
-
         # res_last_week = res_last_week.drop(columns=self.drop_col_res, errors='ignore')
         # res_last_week_new = pd.merge(res_last_week, res_cancel[['res_num', 'status']], how='left', on=['res_num'],
         #                              left_index=True, right_index=False)
@@ -448,9 +447,9 @@ class WeeklyReport(object):
     def _load_data(self):
         # Load recent reservation dataset
         data_path = os.path.join('..', 'input', 'res_status')
-        res_last_week = pd.read_csv(os.path.join(data_path, 'res_' + self.res_status_last_week + '.csv'),
+        res_last_week = pd.read_csv(os.path.join(data_path, 'res_status_' + self.res_status_last_week + '.csv'),
                                     delimiter='\t')
-        res_this_week = pd.read_csv(os.path.join(data_path, 'res_' + self.res_status_this_week + '.csv'),
+        res_this_week = pd.read_csv(os.path.join(data_path, 'res_status_' + self.res_status_this_week + '.csv'),
                                     delimiter='\t')
         data_path = os.path.join('..', 'input', 'res_confirm')
         res_confirmed = pd.read_csv(os.path.join(data_path, 'res_confirm_' + self.res_confirm_last_week + '.csv'),
@@ -504,7 +503,7 @@ class WeeklyReport(object):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'disc_complete')
         disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + self.disc_confirm_last_week + '.csv'),
-                              delimiter='\t', dtype={'date': str, 'disc': int})
+                                   delimiter='\t', dtype={'date': str, 'disc': int})
         disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
         disc_comfirm_dict = defaultdict(dict)
         for date, model, disc in zip(disc_comfirm['date'], disc_comfirm['model'], disc_comfirm['disc']):

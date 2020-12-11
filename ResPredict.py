@@ -111,7 +111,7 @@ class ResPredict(object):
             self._pred(pred_day=pred_day, apply_day=apply_day, fitted_model=fitted, detail_type=detail_type)
 
         print('')
-        print("Model 2 Prediction is finished")
+        print("Reservation Prediction is finished")
         print('')
 
     ####################################
@@ -291,7 +291,7 @@ class ResPredict(object):
     def _get_res_rate_re(self, model_detail: str):
         # Load recent reservation dataset
         load_path = os.path.join('..', 'input', 'res_status')
-        res_re = pd.read_csv(os.path.join(load_path, 'res_' + self.res_status_ud_day + '.csv'), delimiter='\t')
+        res_re = pd.read_csv(os.path.join(load_path, 'res_status_' + self.res_status_ud_day + '.csv'), delimiter='\t')
 
         res_remap_cols = {
             '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',

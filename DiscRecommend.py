@@ -94,7 +94,7 @@ class DiscRecommend(object):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'disc_complete')
         disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + self.disc_confirm_last_week + '.csv'),
-                              delimiter='\t', dtype={'date': str, 'disc': int})
+                                   delimiter='\t', dtype={'date': str, 'disc': int})
         disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
         disc_comfirm_dict = defaultdict(dict)
         for model, date, disc in zip(disc_comfirm['model'], disc_comfirm['date'], disc_comfirm['disc']):

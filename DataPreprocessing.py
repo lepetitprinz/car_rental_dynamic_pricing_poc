@@ -9,8 +9,9 @@ import pandas as pd
 
 class DataPrep(object):
 
-    def __init__(self):
+    def __init__(self, end_date: str):
         self.load_path = os.path.join('..', 'input')
+        self.end_date = end_date
 
         # History dataset
         self.season_hx: pd.DataFrame = pd.DataFrame()
@@ -54,9 +55,9 @@ class DataPrep(object):
         # Data preprocessing: by model
         self._prep_by_group(df=res_hx, group='model', time='hx')
 
-    def prep_res_recent(self, status_update_day: str):
+    def prep_res_recent(self, res_status_ud_day: str):
         # Load ad set recent reservation dataset
-        res_re = self._load_res_re(update_day=status_update_day)
+        res_re = self._load_res_re(res_status_ud_day=res_status_ud_day)
 
         self.season_re = self._get_season_re()
         self.capa_re_model, self.capa_re_car = self._get_capa_re()
@@ -85,6 +86,10 @@ class DataPrep(object):
         self._prep_by_group(df=res_re, group='car', time='re')
         # Data preprocessing: by model
         self._prep_by_group(df=res_re, group='model', time='re')
+
+        print('')
+        print("Data preprocessing is finished.")
+        print('')
 
     # Methods for load dataset (History / Recent)
     def _load_res_hx(self):
@@ -156,9 +161,9 @@ class DataPrep(object):
 
         return capa_re_model, capa_re_car
 
-    def _load_res_re(self, update_day: str):
+    def _load_res_re(self, res_status_ud_day: str):
         # Recent reservation dataset
-        data_path = os.path.join('..', 'input', 'res_status', 'res_' + update_day + '.csv')
+        data_path = os.path.join('..', 'input', 'res_status', 'res_status_' + res_status_ud_day + '.csv')
         data_type = {'예약경로': int, '예약경로명': str, '계약번호': int, '고객구분': int, '고객구분명': str,
                      '총 청구액(VAT포함)': str, '예약모델': str, '예약모델명': str, '차급': str, '대여일': str,
                      '대여시간': str, '반납일': str, '반납시간': str, '대여기간(일)': int, '대여기간(시간)': int,
@@ -250,6 +255,11 @@ class DataPrep(object):
 
         # Utilization
         res_util = self._get_res_util(df=df)  # convert reservation to utilization dataset
+
+        # Filter
+        end_date_dt = dt.datetime.strptime(''.join(self.end_date.split('/')), '%Y%m%d')
+        res_util = res_util[res_util['rent_day'] <= end_date_dt]
+
         disc_util_inc, disc_util_cum = self._grp_by_disc_util(res_util=res_util, group=group, time=time)
 
         if time == 'hx':
@@ -539,7 +549,6 @@ class DataPrep(object):
             model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new', 'ALL NEW K3 (G)': 'k3',
                             '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
         elif group == 'model':
-            # model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl'}
             model_nm_map = {'AVANTE': 'av', 'K3': 'k3', 'VELOSTER': 'vl', 'SOUL': 'su'}
 
         save_path = os.path.join('..', 'result', 'data', 'model_2', time, group)

@@ -22,7 +22,7 @@ class SalesPredict(object):
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
-    def __init__(self, res_update_day: str, disc_confirm_last_week: str):
+    def __init__(self, res_status_ud_day: str, disc_confirm_last_week: str):
         # Path of data & model
         self.path_input = os.path.join('..', 'input')
         self.path_trend_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
@@ -76,7 +76,7 @@ class SalesPredict(object):
 
         # Prediction variables
         # Initial values of variables
-        self.res_update_day = res_update_day
+        self.res_status_ud_day = res_status_ud_day
         self.disc_confirm_last_week = disc_confirm_last_week
         self.res_cnt_init: dict = {}
         self.res_util_init: dict = {}
@@ -459,7 +459,7 @@ class SalesPredict(object):
     def _get_init_res_cnt(self):
         # Load recent reservation dataset
         load_path = os.path.join('..', 'input', 'res_status')
-        res_re = pd.read_csv(os.path.join(load_path, 'res_' + self.res_update_day + '.csv'), delimiter='\t')
+        res_re = pd.read_csv(os.path.join(load_path, 'res_status_' + self.res_status_ud_day + '.csv'), delimiter='\t')
 
         # Rename columns
         res_remap_cols = {
