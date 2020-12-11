@@ -104,7 +104,7 @@ class DiscRecommend(object):
     def _load_init_data(self):
         # Capacity history of each car model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_re = pd.read_csv(os.path.join(load_path, 'capa_curr_' + self.model_detail + '.csv'), delimiter='\t',
+        capa_re = pd.read_csv(os.path.join(load_path, 'capa_re_' + self.model_detail + '.csv'), delimiter='\t',
                               dtype={'date': str, 'model': str, 'capa': int})
         capa_re_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_' + self.model_detail + '.csv'),
                                       delimiter='\t')

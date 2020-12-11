@@ -405,7 +405,7 @@ class ResPredict(object):
     def _get_capa_re(self, model_detail: str):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_re = pd.read_csv(os.path.join(load_path, 'capa_curr_' + model_detail + '.csv'), delimiter='\t',
+        capa_re = pd.read_csv(os.path.join(load_path, 'capa_re_' + model_detail + '.csv'), delimiter='\t',
                               dtype={'date': str, 'model': str, 'capa': int})
         capa_init_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_' + model_detail + '.csv'),
                                         delimiter='\t')

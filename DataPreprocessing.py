@@ -145,7 +145,7 @@ class DataPrep(object):
     def _get_capa_re(self):
         # Capacity of models
         data_path = os.path.join('..', 'input', 'capa')
-        capa_re_model = pd.read_csv(os.path.join(data_path, 'capa_curr_model.csv'), delimiter='\t',
+        capa_re_model = pd.read_csv(os.path.join(data_path, 'capa_re_model.csv'), delimiter='\t',
                                     dtype={'date': str, 'model': str, 'capa': int})
         capa_re_unavail_model = pd.read_csv(os.path.join(data_path, 'capa_unavail_model.csv'), delimiter='\t')
         capa_re_model = self._conv_mon_to_day(df=capa_re_model, end_day='28')
@@ -154,7 +154,7 @@ class DataPrep(object):
         capa_re_model = {(date, model): capa for date, model, capa in zip(capa_re_model['date'],
                                                                           capa_re_model['model'],
                                                                           capa_re_model['capa'])}
-        capa_re_car = pd.read_csv(os.path.join(data_path, 'capa_curr_car.csv'), delimiter='\t',
+        capa_re_car = pd.read_csv(os.path.join(data_path, 'capa_re_car.csv'), delimiter='\t',
                                   dtype={'date': str, 'model': str, 'capa': int})
         capa_re_unavail_car = pd.read_csv(os.path.join(data_path, 'capa_unavail_car.csv'), delimiter='\t')
         capa_re_car = self._conv_mon_to_day(df=capa_re_car, end_day='28')

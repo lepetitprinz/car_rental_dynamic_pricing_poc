@@ -491,7 +491,7 @@ class WeeklyReport(object):
     def _get_capa_re(self):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_init = pd.read_csv(os.path.join(load_path, 'capa_curr_car.csv'), delimiter='\t',
+        capa_init = pd.read_csv(os.path.join(load_path, 'capa_re_car.csv'), delimiter='\t',
                                 dtype={'date': str, 'model': str, 'capa': int})
         capa_re = {(date, self.model_nm_map[model]): capa for date, model, capa in zip(capa_init['date'],
                                                                                        capa_init['model'],

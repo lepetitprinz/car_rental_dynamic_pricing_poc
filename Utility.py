@@ -21,13 +21,25 @@ class Utility(object):
         :return:
         """
         # Load seasonal dataset
-        load_path = os.path.join('..', 'input', 'seasonality', 'seasonality_' + time + '.csv')
-        season = pd.read_csv(load_path, delimiter='\t')
+        data_path = os.path.join('..', 'input', 'seasonality', 'seasonality_' + time + '.csv')
+        season = pd.read_csv(data_path, delimiter='\t')
         season['rent_day'] = pd.to_datetime(season['rent_day'], format='%Y-%m-%d')
 
         return season
 
-
+    @staticmethod
+    def get_capacity(time: str, model_type: str):
+        """
+        :param time: hx / re (history or Recent)
+        :param model_type: model / car
+        :return:
+        """
+        data_path = os.path.join('..', 'input', 'capa', 'capa_' + time + '_' + model_type + '.csv')
+        capacity = pd.read_csv(data_path, delimiter='\t', dtype={'date': str, 'model': str, 'capa': int})
+        # capacity['date'] = pd.to_datetime(capacity['date'], format=)
+        capacity_map = {(date, model): capacity for date, model, capacity in zip(capacity['date'],
+                                                                                 capacity['model'],
+                                                                                 capacity['capa'])}
 
     @staticmethod
     def _get_res_util(df: pd.DataFrame):
