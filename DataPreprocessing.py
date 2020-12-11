@@ -124,12 +124,13 @@ class DataPrep(object):
                                   dtype={'date': str, 'model': str, 'capa': int})
         capa_hx_car = self._conv_mon_to_day_hx(df=capa_hx_car)
         capa_hx_car = {(date, model): capa for date, model, capa in zip(capa_hx_car['date'],
-                                                                             capa_hx_car['model'],
-                                                                             capa_hx_car['capa'])}
+                                                                        capa_hx_car['model'],
+                                                                        capa_hx_car['capa'])}
 
         return capa_hx_model, capa_hx_car
 
-    def _get_season_re(self):
+    @staticmethod
+    def _get_season_re():
         # Seasonal dataset
         data_path = os.path.join('..', 'input', 'seasonality', 'seasonality_curr.csv')
         season_recent = pd.read_csv(data_path, delimiter='\t', dtype={'date': str, 'seasonality': int})
@@ -147,8 +148,8 @@ class DataPrep(object):
         capa_re_model = self._apply_unavail_capa(capa=capa_re_model, capa_unavail=capa_re_unavail_model)
 
         capa_re_model = {(date, model): capa for date, model, capa in zip(capa_re_model['date'],
-                                                                               capa_re_model['model'],
-                                                                               capa_re_model['capa'])}
+                                                                          capa_re_model['model'],
+                                                                          capa_re_model['capa'])}
         capa_re_car = pd.read_csv(os.path.join(data_path, 'capa_curr_car.csv'), delimiter='\t',
                                   dtype={'date': str, 'model': str, 'capa': int})
         capa_re_unavail_car = pd.read_csv(os.path.join(data_path, 'capa_unavail_car.csv'), delimiter='\t')
@@ -156,12 +157,13 @@ class DataPrep(object):
         capa_re_car = self._apply_unavail_capa(capa=capa_re_car, capa_unavail=capa_re_unavail_car)
 
         capa_re_car = {(date, model): capa for date, model, capa in zip(capa_re_car['date'],
-                                                                             capa_re_car['model'],
-                                                                             capa_re_car['capa'])}
+                                                                        capa_re_car['model'],
+                                                                        capa_re_car['capa'])}
 
         return capa_re_model, capa_re_car
 
-    def _load_res_re(self, res_status_ud_day: str):
+    @staticmethod
+    def _load_res_re(res_status_ud_day: str):
         # Recent reservation dataset
         data_path = os.path.join('..', 'input', 'res_status', 'res_status_' + res_status_ud_day + '.csv')
         data_type = {'예약경로': int, '예약경로명': str, '계약번호': int, '고객구분': int, '고객구분명': str,
@@ -195,15 +197,11 @@ class DataPrep(object):
     @staticmethod
     def _cluster_by_group(df: pd.DataFrame, group: str):
         if group == 'car':
-            av_ad = ['아반떼 AD (G)', '아반떼 AD (G) F/L']
-            k3 = ['ALL NEW K3 (G)']
-            soul = ['쏘울 (G)', '쏘울 부스터 (G)']
-
             conditions = [
-                df['res_model_nm'].isin(av_ad),
+                df['res_model_nm'].isin(['아반떼 AD (G)', '아반떼 AD (G) F/L']),
                 df['res_model_nm'] == '올 뉴 아반떼 (G)',
-                df['res_model_nm'].isin(k3),
-                df['res_model_nm'].isin(soul),
+                df['res_model_nm'] == 'ALL NEW K3 (G)',
+                df['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)']),
                 df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
             values = ['아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
 

@@ -15,23 +15,26 @@ class ResPredict(object):
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
-    def __init__(self, res_status_ud_day: str):
+    def __init__(self, res_status_ud_day: str, apply_day: str):
+        self.res_status_ud_day = res_status_ud_day
+        self.apply_day = apply_day
+
         # Path of data & model
         self.path_data_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx')
         self.path_model = os.path.join('..', 'result', 'model', 'res_prediction')
 
         # Data Type
-        self.data_type: list = ['cnt', 'disc', 'util']
-        self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
+        self.data_type = ['cnt', 'disc', 'util']
+        self.data_type_map = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
 
         # Model type
         self.grade_1_6 = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
                           'ALL NEW K3 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
-        self.model_type: list = ['av', 'k3', 'su', 'vl']
-        self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
+        self.model_type = ['av', 'k3', 'su', 'vl']
+        self.car_type = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
         self.model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
                              'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
-        self.detail_type: dict = {'model': self.model_type, 'car': self.car_type}
+        self.detail_type = {'model': self.model_type, 'car': self.car_type}
 
         # Data preprocessing hyper-parameter
         self.random_state = 2020
@@ -85,7 +88,7 @@ class ResPredict(object):
 
         print('Training finished')
 
-    def predict(self, pred_days: list, apply_day: str, disc_confirm_last_week: str, model_detail: str):
+    def predict(self, pred_days: list, disc_confirm_last_week: str, model_detail: str):
         detail_type = self.detail_type[model_detail]
 
         # Load dataset
@@ -108,7 +111,7 @@ class ResPredict(object):
         fitted = self._fit_model(dataset=m2_io, regr='extr', params=extr_bests)
 
         for pred_day in pred_days:
-            self._pred(pred_day=pred_day, apply_day=apply_day, fitted_model=fitted, detail_type=detail_type)
+            self._pred(pred_day=pred_day, fitted_model=fitted, detail_type=detail_type)
 
         print('')
         print("Reservation Prediction is finished")
@@ -236,10 +239,9 @@ class ResPredict(object):
     ##################################
     # 4. Prediction
     ##################################
-    def _pred(self, pred_day: str, apply_day: str, fitted_model: dict, detail_type: list):
+    def _pred(self, pred_day: str, fitted_model: dict, detail_type: list):
         # Get season value and initial discount rate
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
-        apply_day_str = ''.join(apply_day.split('/'))
         season = self.season_re[pred_datetime]
         init_disc = self.disc_last_week[pred_datetime]
         init_capa = self.capacity_re[pred_datetime]
@@ -261,7 +263,7 @@ class ResPredict(object):
                                             init_disc=init_disc, init_capa=init_capa)
 
         # Save the result dataframe
-        self._save_result(result=result_df, pred_day=pred_day, apply_day=apply_day_str)
+        self._save_result(result=result_df, pred_day=pred_day)
 
         print(f'Prediction result on {pred_day} is saved')
 
@@ -389,8 +391,8 @@ class ResPredict(object):
 
     def _get_disc_last_week(self, disc_confirm_last_week: str):
         # Initial capacity of each model
-        load_path = os.path.join('..', 'input', 'disc_complete')
-        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + disc_confirm_last_week + '.csv'),
+        load_path = os.path.join('..', 'input', 'disc_confirm')
+        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_confirm_' + disc_confirm_last_week + '.csv'),
                                    delimiter='\t', dtype={'date': str, 'model': str, 'disc': int})
         disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
 
@@ -404,7 +406,7 @@ class ResPredict(object):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
         capa_re = pd.read_csv(os.path.join(load_path, 'capa_curr_' + model_detail + '.csv'), delimiter='\t',
-                                dtype={'date': str, 'model': str, 'capa': int})
+                              dtype={'date': str, 'model': str, 'capa': int})
         capa_init_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_' + model_detail + '.csv'),
                                         delimiter='\t')
 
@@ -529,9 +531,8 @@ class ResPredict(object):
 
         return model_df
 
-    @staticmethod
-    def _save_result(result: dict, pred_day: str, apply_day: str):
-        save_path = os.path.join('..', 'result', 'data', 'prediction', apply_day)
+    def _save_result(self, result: dict, pred_day: str):
+        save_path = os.path.join('..', 'result', 'data', 'prediction', self.apply_day)
         if not os.path.exists(save_path):
             os.mkdir(save_path)
         for model_key, model_val in result.items():

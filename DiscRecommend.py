@@ -15,7 +15,6 @@ class DiscRecommend(object):
         self.res_update_day = res_update_day
         self.apply_day = apply_day
         self.disc_confirm_last_week = disc_confirm_last_week
-        self.apply_day_str = ''.join(apply_day.split('/'))
         self.model_detail = model_detail
         self.capa_re: dict = dict()
         self.season: pd.DataFrame = pd.DataFrame()
@@ -92,8 +91,8 @@ class DiscRecommend(object):
 
     def _get_disc_confirm_last_week(self):
         # Initial capacity of each model
-        load_path = os.path.join('..', 'input', 'disc_complete')
-        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + self.disc_confirm_last_week + '.csv'),
+        load_path = os.path.join('..', 'input', 'disc_confirm')
+        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_confirm_' + self.disc_confirm_last_week + '.csv'),
                                    delimiter='\t', dtype={'date': str, 'disc': int})
         disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
         disc_comfirm_dict = defaultdict(dict)
@@ -150,7 +149,7 @@ class DiscRecommend(object):
         return capa_new
 
     def _load_data(self, pred_day: str):
-        load_path = os.path.join('..', 'result', 'data', 'prediction', self.apply_day_str)
+        load_path = os.path.join('..', 'result', 'data', 'prediction', self.apply_day)
         detail_type = self.detail_type[self.model_detail]
         res_exp = {}
         for model in detail_type:
@@ -232,7 +231,7 @@ class DiscRecommend(object):
     def _filter_date(self, input_dict: dict):
         for model, df in input_dict.items():
             df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
-            apply_datetime = dt.datetime(*list(map(int, self.apply_day.split('/'))))
+            apply_datetime = dt.datetime.strptime(self.apply_day, '%Y%m%d')
             df = df[df['date'] >= apply_datetime]
             df['date'] = df['date'].apply(lambda x: dt.datetime.strftime(x, '%Y-%m-%d'))
             input_dict[model] = df
@@ -353,7 +352,7 @@ class DiscRecommend(object):
         for model, df in output.items():
             df_merged = pd.concat([df_merged, df], axis=1)
 
-        save_path = os.path.join('..', 'result', 'data', 'recommend', 'lead_time', self.apply_day_str)
+        save_path = os.path.join('..', 'result', 'data', 'recommend', 'lead_time', self.apply_day)
 
         # Make directory
         if not os.path.exists(save_path):
@@ -391,7 +390,7 @@ class DiscRecommend(object):
         return summary_df
 
     def _save_summary_result(self, summary: dict):
-        save_path = os.path.join('..', 'result', 'data', 'recommend', 'summary', self.apply_day_str)
+        save_path = os.path.join('..', 'result', 'data', 'recommend', 'summary', self.apply_day)
 
         # Make directory
         if not os.path.exists(save_path):

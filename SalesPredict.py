@@ -22,43 +22,33 @@ class SalesPredict(object):
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
-    def __init__(self, res_status_ud_day: str, disc_confirm_last_week: str):
+    def __init__(self, res_status_ud_day: str, apply_day: str, disc_confirm_last_week: str, end_date: str):
+        # Initial values of variables
+        self.res_status_ud_day = res_status_ud_day
+        self.apply_day = apply_day
+        self.apply_datetime = dt.datetime.strptime(apply_day, '%Y%m%d')
+        self.disc_confirm_last_week = disc_confirm_last_week
+        self.end_date = end_date
+
         # Path of data & model
         self.path_input = os.path.join('..', 'input')
+        self.path_model = os.path.join('..', 'result', 'model', 'res_pred_lead_time')
         self.path_trend_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
         self.path_sales_per_res = os.path.join('..', 'result', 'data', 'sales_prediction')
-        self.path_model = os.path.join('..', 'result', 'model', 'res_pred_lead_time')
 
         # Data & model types
         self.data_type = ['cnt_inc', 'cnt_cum', 'util_inc', 'util_cum', 'disc']
-        self.model_type = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
-        self.model_1_6 = ['ALL NEW K3 (G)', '아반떼 AD (G)', '아반떼 AD (G) F/L',
-                          '올 뉴 아반떼 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
+        self.car_type = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
+        self.model_1_6 = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
+                          'ALL NEW K3 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
+        self.model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
+                             'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
         self.model_type_map = {'av_ad': '아반떼 AD (G) F/L', 'av_new': '올 뉴 아반떼 (G)',
                                'k3': 'ALL NEW K3 (G)', 'soul': '쏘울 부스터 (G)',
                                'vlst': '더 올 뉴 벨로스터 (G)'}
         self.model_type_map_rev = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
                                    'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul',
                                    '더 올 뉴 벨로스터 (G)': 'vlst'}
-
-        # Reservation fee
-        self.fee_group = {'아반떼 AD (G) F/L': 'm1', 'ALL NEW K3 (G)': 'm1', '더 올 뉴 벨로스터 (G)': 'm1',
-                          '올 뉴 아반떼 (G)': 'm2', '쏘울 부스터 (G)': 'm2'}
-
-        self.fee_per_times = {'fee': {'m1': {1: 17000, 2: 34000, 3: 51000, 4: 67000, 5: 67000, 6: 67000, 7: 84000,
-                                             8: 96000, 9: 96000, 10: 96000, 11: 96000, 12: 96000, 13: 113000,
-                                             14: 120000, 15: 120000, 16: 120000, 17: 120000, 18: 120000, 19: 120000,
-                                             20: 120000, 21: 120000, 22: 120000, 23: 120000, 24: 120000},
-                                      'm2': {1: 18000, 2: 36000, 3: 54000, 4: 73000, 5: 73000, 6: 73000, 7: 91000,
-                                             8: 104000, 9: 104000, 10: 104000, 11: 104000, 12: 104000, 13: 122000,
-                                             14: 130000, 15: 130000, 16: 130000, 17: 130000, 18: 130000, 19: 130000,
-                                             20: 130000, 21: 130000, 22: 130000, 23: 130000, 24: 130000}},
-                              'cdw': {'m1': {1: 20000, 2: 40000, 3: 54000, 4: 72000, 5: 90000, 6: 108000,  7: 112000,
-                                             8: 126000, 9: 126000, 10: 140000, 11: 154000,  12: 168000, 13: 182000,
-                                             14: 196000, 15: 90000, 16: 96000, 17: 102000},
-                                      'm2': {1: 24000, 2: 48000, 3: 66900, 4: 89200, 5: 111500, 6: 133800, 7: 119700,
-                                             8: 136800, 9: 153900, 10: 171000, 11: 188100, 12: 205200, 13: 222300,
-                                             14: 239400, 15: 91500, 16: 97600, 17: 103700}}}
 
         # Initial Setting
         self.random_state = 2020    # Data split randomness
@@ -70,20 +60,17 @@ class SalesPredict(object):
         self.rent_cdw_hx: dict = {}
 
         # Initialize mapping dictionary
-        self.data_map: dict = dict()
         self.split_map: dict = dict()
         self.param_grids = dict()
 
         # Prediction variables
-        # Initial values of variables
-        self.res_status_ud_day = res_status_ud_day
-        self.disc_confirm_last_week = disc_confirm_last_week
-        self.res_cnt_init: dict = {}
-        self.res_util_init: dict = {}
-        self.res_sales_init: dict = {}
-        self.day_to_season: dict = {}
-        self.disc_re: dict = {}
-        self.capa_re: dict = {}
+        self.res_status_cnt: dict = {}
+        self.res_status_util: dict = {}
+        self.res_status_sales: dict = {}
+        self.res_rate_re: dict = {}
+        self.capacity_re: dict = {}
+        self.season_re: dict = {}
+        self.disc_confirmed: dict = {}
         self.avg_unavail_capa = 2
 
         # Lead time
@@ -110,21 +97,17 @@ class SalesPredict(object):
 
         res_hx = res_hx.rename(columns={'car_rent_fee': 'rent_fee'})
 
-        # Group by season & model
-        # res_hx_grp = res_hx.groupby(by=['seasonality', 'res_model']).mean()['rent_period_hours']
-        res_hx_grp = res_hx.groupby(by=['seasonality', 'res_model']).mean()
-        res_hx_grp['rent_fee_org'] = res_hx_grp['rent_fee'] / (1 - res_hx_grp['discount'] / 100)
-        res_hx_grp = res_hx_grp.reset_index(level=(0, 1))
+        # Calculate original fee
+        res_hx['rent_fee_org'] = res_hx['rent_fee'] / (1 - res_hx['discount'] / 100)
 
+        # Group by season & model
+        res_hx_grp = res_hx.groupby(by=['seasonality', 'res_model']).mean()
         res_hx_grp['rent_fee_org'] = np.round(res_hx_grp['rent_fee_org'].to_numpy(), 0)
         res_hx_grp['cdw_fee'] = np.round(res_hx_grp['cdw_fee'].to_numpy(), 0)
+        res_hx_grp = res_hx_grp.reset_index(level=(0, 1))
 
         # Calculate sales by each model
-        # res_hx_grp = self._calc_exp_sales(df=res_hx_grp)
-
-        res_hx_grp = res_hx_grp.drop(columns=['rent_fee', 'tot_fee'],
-                                     errors='ignore')
-
+        res_hx_grp = res_hx_grp.drop(columns=['rent_fee', 'tot_fee'], errors='ignore')
         res_hx_grp.to_csv(os.path.join('..', 'result', 'data', 'sales_prediction', 'sales_per_res.csv'),
                           index=False, encoding='euc-kr')
 
@@ -156,16 +139,13 @@ class SalesPredict(object):
 
         print('Training finished')
 
-    def predict(self, pred_days: list, apply_day: str):
-        apply_day_str = ''.join(apply_day.split('/'))
+    def predict(self, pred_days: list):
         # Load dataset
         self._load_hx()
-
-        # Set initial variables
-        self._set_pred_init_variables()
+        self._set_recent_dataset()
 
         # Set recent data mapping
-        self.res_cnt_init, self.res_util_init, self.res_sales_init = self._get_init_res_cnt()
+        self.res_status_cnt, self.res_rate_re, self.res_status_util, self.res_status_sales = self._get_res_status()
 
         # Define input and output
         self._set_split_map()
@@ -185,12 +165,12 @@ class SalesPredict(object):
         results_exp = {}
         results_rec = {}
         for pred_day in pred_days:
-            sales_exp_final, sales_rec_final = self._pred(pred_day=pred_day, apply_day=apply_day, fitted_model=fitted)
+            sales_exp_final, sales_rec_final = self._pred(pred_day=pred_day, fitted_model=fitted)
             for (model_exp, df_exp), (model_rec, df_rec) in zip(sales_exp_final.items(), sales_rec_final.items()):
                 results_exp[model_exp] = pd.concat([results_exp.get(model_exp, pd.DataFrame()), df_exp], axis=0)
                 results_rec[model_rec] = pd.concat([results_rec.get(model_rec, pd.DataFrame()), df_rec], axis=0)
 
-        save_path = os.path.join(self.path_sales_per_res, apply_day_str, 'summary')
+        save_path = os.path.join(self.path_sales_per_res, self.apply_day, 'summary')
         if not os.path.exists(save_path):
             os.mkdir(save_path)
         for (model_exp, df_exp), (model_rec, df_rec) in zip(results_exp.items(), results_rec.items()):
@@ -212,20 +192,14 @@ class SalesPredict(object):
 
         return res_hx
 
-    @staticmethod
-    def _cluster_by_group(df: pd.DataFrame):
-        av_ad = ['아반떼 AD (G)', '아반떼 AD (G) F/L']
-        k3 = ['ALL NEW K3 (G)']
-        soul = ['쏘울 (G)', '쏘울 부스터 (G)']
-
+    def _cluster_by_group(self, df: pd.DataFrame):
         conditions = [
-            df['res_model_nm'].isin(av_ad),
+            df['res_model_nm'].isin(['아반떼 AD (G)', '아반떼 AD (G) F/L']),
             df['res_model_nm'] == '올 뉴 아반떼 (G)',
-            df['res_model_nm'].isin(k3),
-            df['res_model_nm'].isin(soul),
+            df['res_model_nm'] == 'ALL NEW K3 (G)',
+            df['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)']),
             df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
-        values = ['아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
-
+        values = self.car_type
         df['res_model'] = np.select(conditions, values)
 
         return df
@@ -245,28 +219,6 @@ class SalesPredict(object):
 
         return df
 
-    def _calc_exp_sales(self, df: pd.DataFrame):
-        df['fee_group'] = df['res_model'].apply(lambda x: self.fee_group[x])
-        df['rent_day'] = df['rent_period_hours'] // 24
-        df['rent_hour'] = df['rent_period_hours'] % 24
-
-        df['rent_day'] = df['rent_day'].astype(int)
-        df['rent_hour'] = df['rent_hour'].astype(int)
-
-        df['rent_fee'] = df[['fee_group', 'rent_day', 'rent_hour']].apply(self._calc_fee, kinds='fee', axis=1)
-        df['rent_cdw'] = df[['fee_group', 'rent_day', 'rent_hour']].apply(self._calc_fee, kinds='cdw', axis=1)
-
-        return df
-
-    def _calc_fee(self, x, kinds):
-        fee_group = self.fee_per_times[kinds][x[0]]
-        days = x[1]
-        hours = x[2]
-        if kinds == 'fee':
-            return fee_group[24] * days + fee_group[hours]
-        elif kinds == 'cdw':
-            return fee_group[days]
-
     ###########################################
     # Common Methods for Training & Prediction
     ###########################################
@@ -275,11 +227,8 @@ class SalesPredict(object):
         sales_per_res = pd.read_csv(os.path.join(self.path_sales_per_res, 'sales_per_res.csv'), encoding='euc-kr')
         rent_fee = defaultdict(dict)
         rent_cdw = defaultdict(dict)
-        sales_per_res['res_model'] = sales_per_res['res_model'].apply(lambda x: self.model_type_map_rev[x])
-        for season, model, fee, cdw in zip(sales_per_res['seasonality'],
-                                           sales_per_res['res_model'],
-                                           sales_per_res['rent_fee_org'],
-                                           sales_per_res['cdw_fee']):
+        for season, model, fee, cdw in zip(sales_per_res['seasonality'], sales_per_res['res_model'],
+                                           sales_per_res['rent_fee_org'], sales_per_res['cdw_fee']):
             rent_fee[season].update({model: int(fee)})
             rent_cdw[season].update({model: int(cdw)})
 
@@ -291,7 +240,7 @@ class SalesPredict(object):
         data_types = copy.deepcopy(self.data_type)
         data_types.remove('disc')
         for data_type in data_types:
-            for model in self.model_type:
+            for model in self.car_type:
                 res_data_hx[data_type].update({model: pd.read_csv(os.path.join(self.path_trend_hx, data_type,
                                                                                data_type + '_' + model + '.csv'))})
         # Reservation discount
@@ -317,7 +266,7 @@ class SalesPredict(object):
         io = {}
         for data_type in self.data_type:
             io_model = {}
-            for model in self.model_type:
+            for model in self.car_type:
                 split = self._split_input_target(data_type=data_type, model=model)
                 io_model[model] = split
             io[data_type] = io_model
@@ -405,47 +354,73 @@ class SalesPredict(object):
     ##################################
     # Methods for Prediction
     ##################################
-    def _set_pred_init_variables(self):
-        self.day_to_season = self._get_seasonal_map()
-        self.disc_re = self._get_disc_last_week(disc_confirm_last_week=self.disc_confirm_last_week)
-        self.capa_re = self._get_init_capa()
+    def _set_recent_dataset(self):
+        self.capacity_re = self._get_capa_re()
+        self.season_re = self._get_season_re()
+        self.disc_confirmed = self._get_disc_last_week(disc_confirm_last_week=self.disc_confirm_last_week)
         self.lt, self.lt_vec, self.lt_to_lt_vec = self._get_lead_time()
 
     @staticmethod
-    def _get_seasonal_map():
+    def _get_season_re():
         # Load recent seasonality dataset
         load_path = os.path.join('..', 'input', 'seasonality')
-        ss_curr = pd.read_csv(os.path.join(load_path, 'seasonality_curr.csv'), delimiter='\t')
-        ss_curr['date'] = pd.to_datetime(ss_curr['date'], format='%Y%m%d')
-        day_to_season = {day: season for day, season in zip(ss_curr['date'], ss_curr['seasonality'])}
+        season_re = pd.read_csv(os.path.join(load_path, 'seasonality_curr.csv'), delimiter='\t')
+        season_re['date'] = pd.to_datetime(season_re['date'], format='%Y%m%d')
+        season_re_map = {day: season for day, season in zip(season_re['date'], season_re['seasonality'])}
 
-        return day_to_season
+        return season_re_map
 
-    @staticmethod
-    def _get_disc_last_week(disc_confirm_last_week: str):
+    def _get_disc_last_week(self, disc_confirm_last_week: str):
         # Initial capacity of each model
-        load_path = os.path.join('..', 'input', 'disc_complete')
-        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + disc_confirm_last_week + '.csv'),
+        load_path = os.path.join('..', 'input', 'disc_confirm')
+        disc_confirm = pd.read_csv(os.path.join(load_path, 'disc_confirm_' + disc_confirm_last_week + '.csv'),
                                    delimiter='\t', dtype={'date': str, 'model': str, 'disc': int})
-        disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
+        disc_confirm['date'] = pd.to_datetime(disc_confirm['date'], format='%Y%m%d')
 
         disc_last_week = defaultdict(dict)
-        for date, model, disc in zip(disc_comfirm['date'], disc_comfirm['model'], disc_comfirm['disc']):
-            disc_last_week[date].update({model: disc})
+        for date, model, disc in zip(disc_confirm['date'], disc_confirm['model'], disc_confirm['disc']):
+            disc_last_week[date].update({self.model_nm_map[model]: disc})
 
         return disc_last_week
 
-    @staticmethod
-    def _get_init_capa():
+    def _get_capa_re(self, model_detail='car'):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_init = pd.read_csv(os.path.join(load_path, 'capa_curr_car.csv'), delimiter='\t',
-                                dtype={'date': str, 'model': str, 'capa': int})
-        mon_to_capa_init = {(date, model): capa for date, model, capa in zip(capa_init['date'],
-                                                                             capa_init['model'],
-                                                                             capa_init['capa'])}
+        capa_re = pd.read_csv(os.path.join(load_path, 'capa_curr_' + model_detail + '.csv'), delimiter='\t',
+                              dtype={'date': str, 'model': str, 'capa': int})
+        capa_init_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_' + model_detail + '.csv'),
+                                        delimiter='\t')
 
-        return mon_to_capa_init
+        capa_re = self._conv_mon_to_day(df=capa_re, end_day='31')
+        capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_init_unavail)
+
+        capa_re_dict = defaultdict(dict)
+        for date, model, capa in zip(capa_re['date'], capa_re['model'], capa_re['capa']):
+            capa_re_dict[date].update({self.model_nm_map[model]: capa - self.avg_unavail_capa})
+
+        return capa_re_dict
+
+    @staticmethod
+    def _apply_unavail_capa(capa: pd.DataFrame, capa_unavail: pd.DataFrame):
+        capa_unavail['date'] = pd.to_datetime(capa_unavail['date'], format='%Y%m%d')
+        capa_new = pd.merge(capa, capa_unavail, how='left', on=['date', 'model'], left_index=True, right_index=False)
+        capa_new = capa_new.fillna(0)
+        capa_new['capa'] = capa_new['capa'] - capa_new['unavail']
+
+        return capa_new
+
+    @staticmethod
+    def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
+        months = np.sort(df['date'].unique())
+        days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
+        model_unique = df[['model', 'capa']].drop_duplicates()
+
+        df_days = pd.DataFrame()
+        for model, capa in zip(model_unique['model'], model_unique['capa']):
+            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
+            df_days = pd.concat([df_days, temp], axis=0)
+
+        return df_days
 
     @staticmethod
     def _get_lead_time():
@@ -456,7 +431,7 @@ class SalesPredict(object):
 
         return lt, lt_vec, lt_to_lt_vec
 
-    def _get_init_res_cnt(self):
+    def _get_res_status(self):
         # Load recent reservation dataset
         load_path = os.path.join('..', 'input', 'res_status')
         res_re = pd.read_csv(os.path.join(load_path, 'res_status_' + self.res_status_ud_day + '.csv'), delimiter='\t')
@@ -474,77 +449,89 @@ class SalesPredict(object):
         res_re = res_re.rename(columns=res_remap_cols)
 
         # filter only 1.6 grade car group
-        res_re = res_re[res_re['res_model_nm'].isin([
-            '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)', 'ALL NEW K3 (G)',
-            '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)'])]
+        res_re = res_re[res_re['res_model_nm'].isin(self.model_1_6)]
 
         # Group Car Model
-        conditions = [
-            res_re['res_model_nm'] == '아반떼 AD (G) F/L',
-            res_re['res_model_nm'] == '올 뉴 아반떼 (G)',
-            res_re['res_model_nm'] == 'ALL NEW K3 (G)',
-            res_re['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)']),
-            res_re['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
-        values = self.model_type
-        res_re['res_model_grp'] = np.select(conditions, values)
+        res_re = self._cluster_by_group(df=res_re)
 
         # Drop columns 1
         res_re = res_re.drop(columns=['res_model_nm'], errors='ignore')
         res_re = res_re.sort_values(by=['rent_day', 'res_day'])
 
+        res_re['rent_day'] = pd.to_datetime(res_re['rent_day'], format='%Y-%m-%d')
+        res_re['res_day'] = pd.to_datetime(res_re['res_day'], format='%Y-%m-%d')
+
         res_util = self._get_res_util(df=res_re)
 
         # Drop columns 2
         res_drop_col = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm',
-                        'res_model', 'car_grd', 'rent_time', 'return_day', 'return_time', 'rent_period_day',
+                        'car_grd', 'rent_time', 'return_day', 'return_time', 'rent_period_day',
                         'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm', 'sale_purpose',
                         'applyed_discount', 'discount_rate', 'member_grd', 'sale_purpose', 'car_kind']
         res_re = res_re.drop(columns=res_drop_col, errors='ignore')
 
-        res_re['rent_day'] = pd.to_datetime(res_re['rent_day'], format='%Y-%m-%d')
-        res_re['res_day'] = pd.to_datetime(res_re['res_day'], format='%Y-%m-%d')
-
         # Filter datetime
-        res_re = res_re[res_re['rent_day'] <= dt.datetime(2021, 2, 28)]
-        res_util = res_util[res_util['rent_day'] <= dt.datetime(2021, 2, 28)]
+        end_datetime = dt.datetime.strptime(self.end_date, '%Y%m%d')
+        res_re = res_re[res_re['rent_day'] <= end_datetime]
+        res_util = res_util[res_util['rent_day'] <= end_datetime]
 
-        return self._group(res_cnt=res_re, res_util=res_util)
+        res_cnt_dict, res_rate_dict, res_util_dict, res_sales_dict = self._group(res_cnt=res_re, res_util=res_util)
+
+        return res_cnt_dict, res_rate_dict, res_util_dict, res_sales_dict
+
+    def _add_capacity(self, df: pd.DataFrame):
+        df['capa'] = df[['rent_day', 'res_model']].apply(self._set_capa, axis=1)
+
+        return df
+
+    def _set_capa(self, x):
+        return self.capacity_re[x[0]][x[1]]
 
     def _group(self, res_cnt: pd.DataFrame, res_util: pd.DataFrame):
         # Grouping
-        cum_cnt = res_cnt.groupby(by=['rent_day', 'res_model_grp']).count()['res_num']
+        cum_cnt = res_cnt.groupby(by=['rent_day', 'res_model']).count()['res_num']
         cum_cnt = cum_cnt.reset_index(level=(0, 1))
 
+        cum_cnt = self._add_capacity(df=cum_cnt)
+        cum_cnt['res_rate'] = cum_cnt['res_num'] / cum_cnt['capa']
+
         res_cnt_dict = defaultdict(dict)
-        for day, model, cnt in zip(cum_cnt['rent_day'], cum_cnt['res_model_grp'], cum_cnt['res_num']):
+        for day, model, cnt in zip(cum_cnt['rent_day'], cum_cnt['res_model'], cum_cnt['res_num']):
             day_str = day.strftime('%Y-%m-%d')
             res_cnt_dict[day_str].update({model: cnt})
 
-        cum_util = res_util.groupby(by=['rent_day', 'res_model_grp']).sum()['util_rate']
+        res_rate_dict = defaultdict(dict)
+        for day, model, cnt in zip(cum_cnt['rent_day'], cum_cnt['res_model'], cum_cnt['res_rate']):
+            res_rate_dict[day].update({model: cnt})
+
+        cum_util = res_util.groupby(by=['rent_day', 'res_model']).sum()['util_rate']
         cum_util = cum_util.reset_index(level=(0, 1))
+        cum_util = cum_util.rename(columns={'util_rate': 'util'})
+
+        cum_util = self._add_capacity(df=cum_util)
+        cum_util['util_rate'] = cum_util['util'] / cum_util['capa']
 
         res_util_dict = defaultdict(dict)
-        for day, model, util in zip(cum_util['rent_day'], cum_util['res_model_grp'], cum_util['util_rate']):
-            mon_str = day.strftime('%Y%m')
+        for day, model, util_rate in zip(cum_util['rent_day'], cum_util['res_model'], cum_util['util_rate']):
             day_str = day.strftime('%Y-%m-%d')
-            res_util_dict[day_str].update({model: util / self.capa_re[(mon_str, self.model_type_map[model])]})
+            res_util_dict[day_str].update({model: util_rate})
 
-        cum_sales = res_cnt.groupby(by=['rent_day', 'res_model_grp']).sum()['tot_fee']
+        cum_sales = res_cnt.groupby(by=['rent_day', 'res_model']).sum()['tot_fee']
         cum_sales = cum_sales.reset_index(level=(0, 1))
 
         res_sales_dict = defaultdict(dict)
-        for day, model, sales in zip(cum_sales['rent_day'], cum_sales['res_model_grp'], cum_sales['tot_fee']):
+        for day, model, sales in zip(cum_sales['rent_day'], cum_sales['res_model'], cum_sales['tot_fee']):
             day_str = day.strftime('%Y-%m-%d')
             res_sales_dict[day_str].update({model: sales})
 
-        return res_cnt_dict, res_util_dict, res_sales_dict
+        return res_cnt_dict, res_rate_dict, res_util_dict, res_sales_dict
 
     @staticmethod
     def _get_res_util(df: pd.DataFrame):
         res_util = []
         for rent_d, rent_t, return_d, return_t, res_day, discount, model in zip(
                 df['rent_day'], df['rent_time'], df['return_day'], df['return_time'],
-                df['res_day'], df['discount'], df['res_model_grp']):
+                df['res_day'], df['discount'], df['res_model']):
 
             day_hour = timedelta(hours=24)
             six_hour = timedelta(hours=6)
@@ -581,7 +568,7 @@ class SalesPredict(object):
 
             res_util.extend(np.array([
                 date_range, [res_day] * date_len, util, [discount] * date_len, [model] * date_len]).T)
-        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util_rate', 'discount', 'res_model_grp'])
+        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util_rate', 'discount', 'res_model'])
 
         return res_util_df
 
@@ -589,7 +576,7 @@ class SalesPredict(object):
         regr_bests = {}
         for data_type in self.data_type:
             model_bests = {}
-            for model in self.model_type:
+            for model in self.car_type:
                 f = open(os.path.join(self.path_model, data_type, regr + '_params_' + model + '.pickle'), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
@@ -619,16 +606,16 @@ class SalesPredict(object):
 
         return fitted_re
 
-    def _get_pred_input_init(self, pred_mon: str, season: int, lead_time_vec: int, res_cnt: dict, disc: int):
+    def _get_pred_input_init(self, season: int, lead_time_vec: int, disc: dict, res_rate: dict):
         pred_input = defaultdict(dict)
-        for model in self.model_type:
-            capa = self.capa_re[(pred_mon, self.model_type_map[model])]
+        for model in self.car_type:
             for data_type in self.data_type:
                 if data_type in ['disc']:
                     pred_input[model].update({data_type: np.array([season, lead_time_vec,
-                                                                   res_cnt.get(model, 0) / capa]).reshape(1, -1)})
+                                              res_rate.get(model, 0)]).reshape(1, -1)})
                 else:
-                    pred_input[model].update({data_type: np.array([season, lead_time_vec, disc]).reshape(1, -1)})
+                    pred_input[model].update({data_type: np.array([season, lead_time_vec,
+                                                                   disc[model]]).reshape(1, -1)})
 
         return pred_input
 
@@ -642,14 +629,14 @@ class SalesPredict(object):
 
         return pred_input
 
-    def _pred_sales_exp(self, pred_mon: str, pred_input: dict, season: int, init_data: list, lead_time_vec: int,
-                        fitted_model: dict, sales_per_res: dict, cdw_per_res: dict):
+    def _pred_sales_exp(self, pred_input: dict, season: int, init_data: list, init_capa: dict,
+                        lead_time_vec: int, fitted_model: dict, sales_per_res: dict, cdw_per_res: dict):
         # Calculate first row
         temp = defaultdict(dict)
         for model, model_val in fitted_model.items():   # Model: ad_av / ad_new / k3 / soul / vlst
             # Set current reservation status
             res_cnt = init_data[0].get(model, 0)    # Current reservation counts
-            disc = init_data[2]                     # Current discount
+            disc = init_data[2][model]                     # Current discount
             exp_sales = init_data[3].get(model, 0)  # Current sales
             temp[model].update({'lead_time_vec': [lead_time_vec]})
             temp[model].update({'res_cnt': [res_cnt]})
@@ -658,7 +645,7 @@ class SalesPredict(object):
             temp[model].update({'exp_sales': [exp_sales]})    # Expected sales
             temp[model].update({'exp_cum_sales': [exp_sales]})    # Expected cum. sales
 
-            capa = self.capa_re[(pred_mon, self.model_type_map[model])]
+            capa = init_capa.get(model, 0)
 
             # Calculate current sales
             for key, val in model_val.items():    # Type: cnt_inc / cnt_cum / util_inc / util_cum / disc
@@ -692,7 +679,7 @@ class SalesPredict(object):
                 temp[model]['exp_sales'].append(round(exp_sales, 0))
                 temp[model]['exp_cum_sales'].append(round(exp_cum_sales, 0))
 
-                capa = self.capa_re[(pred_mon, self.model_type_map[model])]
+                capa = init_capa.get(model, 0)
 
                 # Expectation
                 pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc, capa=capa)
@@ -704,15 +691,15 @@ class SalesPredict(object):
 
         return temp
 
-    def _pred_sales_rec(self, pred_mon: str, pred_input: dict, season: int, init_data: list, lead_time_vec: int,
-                        fitted_model: dict, sales_per_res: dict, cdw_per_res: dict):
+    def _pred_sales_rec(self, pred_input: dict, season: int, init_capa: dict, init_data: list,
+                        lead_time_vec: int, fitted_model: dict, sales_per_res: dict, cdw_per_res: dict):
         # Calculate first row
         temp = defaultdict(dict)
         for model, model_val in fitted_model.items():   # Model: ad_av / ad_new / k3 / soul / vlst
             # Set current reservation status
             res_cnt = init_data[0].get(model, 0)    # Current reservation counts
             res_util = round(init_data[1].get(model, 0), 1)
-            disc = init_data[2]                     # Current discount
+            disc = init_data[2][model]              # Current discount
             exp_sales = init_data[3].get(model, 0)  # Current sales
             temp[model].update({'lead_time_vec': [lead_time_vec]})
             temp[model].update({'res_cnt': [res_cnt]})
@@ -721,7 +708,8 @@ class SalesPredict(object):
             temp[model].update({'exp_sales': [exp_sales]})    # Expected sales
             temp[model].update({'exp_cum_sales': [exp_sales]})    # Expected cum. sales
 
-            capa = self.capa_re[(pred_mon, self.model_type_map[model])]
+            capa = init_capa.get(model, 0)
+
             # Calculate current sales
             for key, val in model_val.items():    # Type: cnt_inc / cnt_cum / util_inc / util_cum / disc
                 if key in ['cnt_inc', 'cnt_cum']:
@@ -763,7 +751,7 @@ class SalesPredict(object):
                 temp[model]['exp_sales'].append(round(exp_sales, 0))
                 temp[model]['exp_cum_sales'].append(round(exp_cum_sales, 0))
 
-                capa = self.capa_re[(pred_mon, self.model_type_map[model])]
+                capa = init_capa.get(model, 0)
 
                 # Expectation
                 pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc, capa=capa)
@@ -794,11 +782,10 @@ class SalesPredict(object):
         else:
             return (disc // 5) * 5
 
-    def _save_result(self, result: dict, pred_day: str, apply_day: str, kinds: str):
+    def _save_result(self, result: dict, pred_day: str, kinds: str):
         pred_day_str = ''.join(pred_day.split('-'))
-        apply_day_str = ''.join(apply_day.split('/'))
 
-        save_path = os.path.join(self.path_sales_per_res, apply_day_str)
+        save_path = os.path.join(self.path_sales_per_res, self.apply_day)
         if not os.path.exists(save_path):
             os.mkdir(save_path)
         if not os.path.exists(os.path.join(save_path, kinds)):
@@ -838,50 +825,50 @@ class SalesPredict(object):
     def _get_rec(self, x):
         return self._rec_disc_function(curr=x[0], exp=x[1], dmd=0)
 
-    def _pred(self, pred_day: str, apply_day: str, fitted_model: dict):
+    def _pred(self, pred_day: str, fitted_model: dict):
         # Get season value and initial discount rate
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
-        pred_mon = ''.join(pred_day.split('-'))[:6]
-        apply_datetime = dt.datetime(*list(map(int, apply_day.split('/'))))
-        season = self.day_to_season[pred_datetime]
+        season = self.season_re[pred_datetime]
         fee_per_res = self.rent_fee_hx[season]  # Reservation fee of history dataset by each model
         cdw_per_res = self.rent_cdw_hx[season]
-        init_disc = self.disc_re[pred_datetime]
-        init_res = self.res_cnt_init[pred_day]
-        init_util = self.res_util_init[pred_day]
-        init_sales = self.res_sales_init[pred_day]
+        init_disc = self.disc_confirmed[pred_datetime]
+        init_res = self.res_status_cnt[pred_day]
+        init_util = self.res_status_util[pred_day]
+        init_sales = self.res_status_sales[pred_day]
+        init_capa = self.capacity_re[pred_datetime]
+        init_res_rate = self.res_rate_re[pred_datetime]
 
         # Calculate lead time vector
-        lead_time = (pred_datetime - apply_datetime).days
+        lead_time = (pred_datetime - self.apply_datetime).days
         lead_time_vec = self.lt_to_lt_vec[lead_time * -1]
 
         # Make initial input
-        pred_input = self._get_pred_input_init(pred_mon=pred_mon, season=season, lead_time_vec=lead_time_vec,
-                                               res_cnt=init_res, disc=init_disc)
+        pred_input = self._get_pred_input_init(season=season, lead_time_vec=lead_time_vec,
+                                               disc=init_disc, res_rate=init_res_rate)
 
         # Rolling sales prediction
         # Expect sales on past trend
-        pred_sales_exp = self._pred_sales_exp(pred_mon=pred_mon, pred_input=pred_input, season=season,
-                                              lead_time_vec=lead_time_vec,
+        pred_sales_exp = self._pred_sales_exp(pred_input=pred_input, season=season, lead_time_vec=lead_time_vec,
                                               sales_per_res=fee_per_res, cdw_per_res=cdw_per_res,
+                                              init_capa=init_capa,
                                               init_data=[init_res, init_util, init_disc, init_sales],
                                               fitted_model=fitted_model)
         # Expect sales on recommendation
-        pred_sales_rec = self._pred_sales_rec(pred_mon=pred_mon, pred_input=pred_input, season=season,
-                                              lead_time_vec=lead_time_vec,
+        pred_sales_rec = self._pred_sales_rec(pred_input=pred_input, season=season, lead_time_vec=lead_time_vec,
                                               sales_per_res=fee_per_res, cdw_per_res=cdw_per_res,
+                                              init_capa=init_capa,
                                               init_data=[init_res, init_util, init_disc, init_sales],
                                               fitted_model=fitted_model)
 
         # Rearrange and drop unncessary columns
-        pred_sales_exp = self._rearr_column(df=pred_sales_exp, pred_day=pred_day, apply_day=apply_day, kinds='exp')
-        pred_sales_rec = self._rearr_column(df=pred_sales_rec, pred_day=pred_day, apply_day=apply_day, kinds='rec')
+        pred_sales_exp = self._rearr_column(df=pred_sales_exp, pred_day=pred_day, kinds='exp')
+        pred_sales_rec = self._rearr_column(df=pred_sales_rec, pred_day=pred_day, kinds='rec')
 
-        self._save_result(result=pred_sales_exp, pred_day=pred_day, apply_day=apply_day, kinds='exp')
-        self._save_result(result=pred_sales_rec, pred_day=pred_day, apply_day=apply_day, kinds='rec')
+        self._save_result(result=pred_sales_exp, pred_day=pred_day, kinds='exp')
+        self._save_result(result=pred_sales_rec, pred_day=pred_day, kinds='rec')
 
-        self._draw_trend_graph(exp=pred_sales_exp, rec=pred_sales_rec,
-                               pred_day=pred_day, apply_day=apply_day)
+        # self._draw_trend_graph(exp=pred_sales_exp, rec=pred_sales_rec,
+        #                        pred_day=pred_day)
 
         sales_exp_final = self._get_final_result(result=pred_sales_exp, pred_day=pred_day)
         sales_rec_final = self._get_final_result(result=pred_sales_rec, pred_day=pred_day)
@@ -889,7 +876,8 @@ class SalesPredict(object):
         print(f'Prediction result on {pred_day} is saved')
         return sales_exp_final, sales_rec_final
 
-    def _get_final_result(self, result: dict, pred_day: str):
+    @staticmethod
+    def _get_final_result(result: dict, pred_day: str):
         result_dict = {}
         for model, df in result.items():
             temp = pd.DataFrame({'rent_day': [pred_day],
@@ -899,9 +887,8 @@ class SalesPredict(object):
 
         return result_dict
 
-    def _draw_trend_graph(self, exp: dict, rec: dict, pred_day: str, apply_day: str):
+    def _draw_trend_graph(self, exp: dict, rec: dict, pred_day: str):
         pred_day_str = ''.join(pred_day.split('-'))
-        apply_day_str = ''.join(apply_day.split('/'))
 
         fig_size = (9, 6)
         for (exp_key, exp_val), (rec_key, rec_val) in zip(exp.items(), rec.items()):
@@ -929,19 +916,6 @@ class SalesPredict(object):
             axes[1].set_ylabel('건')
             axes[0].legend()
 
-            # Reservation Utilization Graph
-            # exp_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-            #                           color=cor_exp, label='가동률(exp)', ax=axes[1])
-            # exp_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-            #                               color=cor_exp_exp, label='기대 가동률(exp)', ax=axes[1])
-            # rec_val['util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-            #                           color=cor_rec, label='가동률(rec)', ax=axes[1])
-            # rec_val['exp_util'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
-            #                               color=cor_rec_exp, label='기대 가동률(rec)', ax=axes[1])
-            # axes[1].set_xlabel('리드타임')
-            # axes[1].set_ylabel('%')
-            # axes[1].legend()
-
             # Reservation Discount Graph
             exp_val['disc'].plot.line(figsize=fig_size, linewidth=0.9, alpha=0.9,
                                       color=cor_exp, label='할인율(exp)', ax=axes[1])
@@ -958,15 +932,14 @@ class SalesPredict(object):
             # plt.suptitle(f'Exp. Sales: {exp_sales} / Rec. Sales: {rec_sales}')
 
             # Save images
-            save_path = os.path.join(self.path_sales_per_res, apply_day_str, 'img', pred_day_str)
+            save_path = os.path.join(self.path_sales_per_res, self.apply_day, 'img', pred_day_str)
             if not os.path.exists(save_path):
                 os.mkdir(save_path)
             plt.savefig(os.path.join(save_path, 'sales_pred_' + exp_key + '.png'))
             plt.close()
 
-    @staticmethod
-    def _rearr_column(df: dict, pred_day: str, apply_day: str, kinds: str):
-        start_day = dt.datetime.strptime(apply_day, "%Y/%m/%d")
+    def _rearr_column(self, df: dict, pred_day: str, kinds: str):
+        start_day = self.apply_datetime
         end_day = dt.datetime.strptime(pred_day, "%Y-%m-%d")
 
         if (end_day - start_day).days < 28:

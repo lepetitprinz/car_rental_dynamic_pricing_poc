@@ -501,8 +501,8 @@ class WeeklyReport(object):
 
     def _get_disc_confirm_last_week(self):
         # Initial capacity of each model
-        load_path = os.path.join('..', 'input', 'disc_complete')
-        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_complete_' + self.disc_confirm_last_week + '.csv'),
+        load_path = os.path.join('..', 'input', 'disc_confirm')
+        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_confirm_' + self.disc_confirm_last_week + '.csv'),
                                    delimiter='\t', dtype={'date': str, 'disc': int})
         disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
         disc_comfirm_dict = defaultdict(dict)
