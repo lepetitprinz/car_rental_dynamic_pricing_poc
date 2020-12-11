@@ -24,13 +24,13 @@ warnings.filterwarnings('ignore')
 def data_preprocessing(res_status_ud_day: str, end_date: str):
     data_prep = DataPrep(end_date=end_date)
     # History dataset
-    # data_prep.prep_res_hx()
+    data_prep.prep_res_hx()
     # Recent  dataset
     data_prep.prep_res_recent(res_status_ud_day=res_status_ud_day)
 
 
 # Model 1 : Jeju visitor prediction
-def model_1(start_date: str, end_date: str, n_test: int, pred_step: int):
+def dmd_predict(start_date: str, end_date: str, n_test: int, pred_step: int):
     test_models = ['ar', 'arima', 'hw']  # AR / / ARIMA / Holt-winters
     # Parameters Grids
     param_grids = {
@@ -54,8 +54,8 @@ def model_1(start_date: str, end_date: str, n_test: int, pred_step: int):
 
 
 # Model 2
-def model_2(start_date: str, end_date: str, apply_day: str,
-            res_status_ud_day: str, disc_confirm_last_week: str, model_detail: str):
+def res_predict(start_date: str, end_date: str, apply_day: str,
+                res_status_ud_day: str, disc_confirm_last_week: str, model_detail: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
@@ -69,8 +69,8 @@ def model_2(start_date: str, end_date: str, apply_day: str,
 
 
 # Model 3
-def model_3(start_date: str, end_date: str, apply_day: str, res_update_day: str,
-            disc_confirm_last_week: str, model_detail: str):
+def disc_recommend(start_date: str, end_date: str, apply_day: str, res_update_day: str,
+                   disc_confirm_last_week: str, model_detail: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
@@ -79,8 +79,8 @@ def model_3(start_date: str, end_date: str, apply_day: str, res_update_day: str,
     model.rec(pred_days=pred_days)
 
 
-def model_sales_pred(start_date: str, end_date: str, apply_day: str,
-                     res_status_ud_day: str, disc_confirm_last_week: str):
+def sales_predict(start_date: str, end_date: str, apply_day: str,
+                  res_status_ud_day: str, disc_confirm_last_week: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
@@ -145,47 +145,48 @@ def main():
     res_confirm_day_from = '201201'
     res_confirm_day_to = '201204'
 
-    # Data Preprocessing
-    # data_preprocessing(res_status_ud_day=res_status_ud_day,end_date=end_date)
+    # 1.Demand Prediction
+    # dmd_predict(start_date=time_series_start_date,
+    #             end_date=times_series_end_date,
+    #             n_test=n_test,
+    #             pred_step=31 + 28 + 31)
 
-    # Model 1
-    # model_1(start_date=time_series_start_date,
-    #         end_date=times_series_end_date,
-    #         n_test=n_test,
-    #         pred_step=31 + 28 + 31)
+    # 2.Data Preprocessing
+    data_preprocessing(res_status_ud_day=res_status_ud_day,end_date=end_date)
 
-    # Model 2
-    # model_2(start_date=start_date,
-    #         end_date=end_date,
-    #         apply_day=apply_day,
-    #         res_status_ud_day=res_status_ud_day,
-    #         disc_confirm_last_week=disc_confirm_last_week,
-    #         model_detail='car')
+    # 3.Reservation Prediction
+    res_predict(start_date=start_date,
+                end_date=end_date,
+                apply_day=apply_day,
+                res_status_ud_day=res_status_ud_day,
+                disc_confirm_last_week=disc_confirm_last_week,
+                model_detail='car')
 
-    # Model 3
-    # model_3(start_date=start_date,
-    #         end_date=end_date,
-    #         apply_day=apply_day,
-    #         res_update_day=res_status_ud_day,
-    #         disc_confirm_last_week=disc_confirm_last_week,
-    #         model_detail='car')
+    # 4.Discount Recommendation
+    disc_recommend(start_date=start_date,
+                   end_date=end_date,
+                   apply_day=apply_day,
+                   res_update_day=res_status_ud_day,
+                   disc_confirm_last_week=disc_confirm_last_week,
+                   model_detail='car')
 
-    # Sales Prediction
-    model_sales_pred(start_date=start_date,
-                     end_date=end_date,
-                     apply_day=apply_day,
-                     res_status_ud_day=res_status_ud_day,
-                     disc_confirm_last_week=disc_confirm_last_week)
+    # 5.Sales Prediction
+    sales_predict(start_date=start_date,
+                  end_date=end_date,
+                  apply_day=apply_day,
+                  res_status_ud_day=res_status_ud_day,
+                  disc_confirm_last_week=disc_confirm_last_week)
 
-    # weekly_report(start_date_weekly=start_date_weekly, end_date_weekly=end_date_weekly,
-    #               apply_last_week=apply_last_week, apply_this_week=apply_this_week,
-    #               res_status_last_week=res_status_last_week, res_status_this_week=res_status_this_week,
-    #               res_status_cancel_this_week=res_status_cancel_this_week,
-    #               res_confirm_last_week=res_confirm_last_week,
-    #               disc_confirm_last_week=disc_confirm_last_week,
-    #               disc_rec_last_week=disc_rec_last_week,
-    #               res_confirm_day_from=res_confirm_day_from,
-    #               res_confirm_day_to=res_confirm_day_to)
+    # 6.Weekly Report
+    weekly_report(start_date_weekly=start_date_weekly, end_date_weekly=end_date_weekly,
+                  apply_last_week=apply_last_week, apply_this_week=apply_this_week,
+                  res_status_last_week=res_status_last_week, res_status_this_week=res_status_this_week,
+                  res_status_cancel_this_week=res_status_cancel_this_week,
+                  res_confirm_last_week=res_confirm_last_week,
+                  disc_confirm_last_week=disc_confirm_last_week,
+                  disc_rec_last_week=disc_rec_last_week,
+                  res_confirm_day_from=res_confirm_day_from,
+                  res_confirm_day_to=res_confirm_day_to)
 
 # Run main function
 main()

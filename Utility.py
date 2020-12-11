@@ -1,19 +1,33 @@
 import os
-
-import pandas as pd
-import numpy as np
-
+import datetime as dt
 from datetime import timedelta
+from dateutil.relativedelta import relativedelta
+
+import numpy as np
+import pandas as pd
 
 
 class Utility(object):
 
     def __init__(self):
-        self.df = None
-        pass
+        self.grade_1_6 = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
+                          'ALL NEW K3 (G)',
+                          '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
 
-    def rename_cols(self):
-        pass
+    @staticmethod
+    def get_season(time: str):
+        """
+        :param time: hx / re (history or recent)
+        :return:
+        """
+        # Load seasonal dataset
+        load_path = os.path.join('..', 'input', 'seasonality', 'seasonality_' + time + '.csv')
+        season = pd.read_csv(load_path, delimiter='\t')
+        season['rent_day'] = pd.to_datetime(season['rent_day'], format='%Y-%m-%d')
+
+        return season
+
+
 
     @staticmethod
     def _get_res_util(df: pd.DataFrame):

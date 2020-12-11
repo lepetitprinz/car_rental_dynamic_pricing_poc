@@ -1,3 +1,5 @@
+from Utility import Utility
+
 import os
 import datetime as dt
 from datetime import timedelta
@@ -10,6 +12,7 @@ import pandas as pd
 class DataPrep(object):
 
     def __init__(self, end_date: str):
+        self.utility = Utility
         self.load_path = os.path.join('..', 'input')
         self.end_date = end_date
 
@@ -36,6 +39,7 @@ class DataPrep(object):
         # Load and set data
         res_hx = self._load_res_hx()
         self.season_hx = self._get_season_hx()
+        # self.season_hx = self.utility.get_season(time='hx')
         self.capa_hx_model, self.capa_hx_car = self._get_caap_hx()
         self.capacity_hx = {'hx': {'model': self.capa_hx_model,
                                    'car': self.capa_hx_car}}

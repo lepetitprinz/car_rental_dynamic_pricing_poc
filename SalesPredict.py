@@ -43,12 +43,6 @@ class SalesPredict(object):
                           'ALL NEW K3 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
         self.model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
                              'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
-        self.model_type_map = {'av_ad': '아반떼 AD (G) F/L', 'av_new': '올 뉴 아반떼 (G)',
-                               'k3': 'ALL NEW K3 (G)', 'soul': '쏘울 부스터 (G)',
-                               'vlst': '더 올 뉴 벨로스터 (G)'}
-        self.model_type_map_rev = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
-                                   'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul',
-                                   '더 올 뉴 벨로스터 (G)': 'vlst'}
 
         # Initial Setting
         self.random_state = 2020    # Data split randomness
@@ -660,20 +654,21 @@ class SalesPredict(object):
                 temp[model]['lead_time_vec'].append(lt_vec)
 
                 # Calculate next reservation status
-                cnt = temp[model]['res_cnt'][-1] + temp[model]['exp_cnt_inc'][-1]
                 util = temp[model]['res_util'][-1] + temp[model]['exp_util_inc'][-1]
+                cnt = temp[model]['res_cnt'][-1] + temp[model]['exp_cnt_inc'][-1]
                 disc = temp[model]['exp_disc'][-1]
                 exp_sales = temp[model]['exp_cnt_inc'][-1] * (sales_per_res[model] * (1-disc/100) + cdw_per_res[model])
-
                 # Maximum Utilization rate : 100%
+
                 if util >= 1:
                     util = 1
                     if temp[model]['res_util'][-1] >= 1:
                         exp_sales = 0
+                        cnt = temp[model]['res_cnt'][-1]
                 exp_cum_sales = temp[model]['exp_cum_sales'][-1] + exp_sales
 
                 # Rounding
-                temp[model]['res_cnt'].append(round(cnt, 1))
+                temp[model]['res_cnt'].append(round(cnt, 2))
                 temp[model]['res_util'].append(round(util, 2))
                 temp[model]['disc'].append(round(disc, 1))
                 temp[model]['exp_sales'].append(round(exp_sales, 0))
@@ -731,8 +726,8 @@ class SalesPredict(object):
                 temp[model]['lead_time_vec'].append(lt_vec)
 
                 # Calculate next reservation status
-                cnt = temp[model]['res_cnt'][-1] + temp[model]['exp_cnt_inc'][-1]
                 util = temp[model]['res_util'][-1] + temp[model]['exp_util_inc'][-1]
+                cnt = temp[model]['res_cnt'][-1] + temp[model]['exp_cnt_inc'][-1]
                 disc = temp[model]['rec_disc'][-1]
                 exp_sales = temp[model]['exp_cnt_inc'][-1] * (sales_per_res[model] * (1-disc/100) + cdw_per_res[model])
 
@@ -741,11 +736,11 @@ class SalesPredict(object):
                     util = 1
                     if temp[model]['res_util'][-1] >= 1:
                         exp_sales = 0
-
+                        cnt = temp[model]['res_cnt'][-1]
                 exp_cum_sales = temp[model]['exp_cum_sales'][-1] + exp_sales
 
                 # Rounding
-                temp[model]['res_cnt'].append(round(cnt, 1))
+                temp[model]['res_cnt'].append(round(cnt, 2))
                 temp[model]['res_util'].append(round(util, 2))
                 temp[model]['disc'].append(round(disc, 1))
                 temp[model]['exp_sales'].append(round(exp_sales, 0))
