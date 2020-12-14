@@ -1,7 +1,5 @@
 import os
-
 import numpy as np
-import pandas as pd
 
 
 class OfflineLearning(object):
@@ -18,8 +16,8 @@ class OfflineLearning(object):
 
         return cost
 
-    def stocastic_gradient_descent(self, x: np.array, y: np.array, theta: float,
-                                   learning_rate=0.01, iterations=100):
+    def stochastic_gradient_descent(self, x: np.array, y: np.array, theta: float,
+                                    learning_rate=0.01, iterations=100):
         """
         :param x: X: Matrix of X with added bias units
         :param y: y: Vector of Y
@@ -106,7 +104,7 @@ class OfflineLearning(object):
 
         return theta, cost_history, theta_history
 
-    def _stocastic_gradient_descent_BAK(self, x, y, theta, learning_rate=0.01, iterations=100):
+    def _stochastic_gradient_descent_BAK(self, x, y, theta, learning_rate=0.01, iterations=100):
         """
         :param x: X: Matrix of X with added bias units
         :param y: y: Vector of Y
