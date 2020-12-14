@@ -18,7 +18,6 @@ rc('font', family='NanumBarunGothic')
 
 
 class SalesPredict(object):
-
     REGRESSORS = {"Extra Trees Regressor": ExtraTreesRegressor(),
                   "extr": ExtraTreesRegressor}
 
@@ -45,8 +44,8 @@ class SalesPredict(object):
                              'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
 
         # Initial Setting
-        self.random_state = 2020    # Data split randomness
-        self.test_size = 0.2        # Test dataset size
+        self.random_state = 2020  # Data split randomness
+        self.test_size = 0.2  # Test dataset size
 
         # Dataset
         self.res_data_hx: dict = {}
@@ -168,8 +167,8 @@ class SalesPredict(object):
         if not os.path.exists(save_path):
             os.mkdir(save_path)
         for (model_exp, df_exp), (model_rec, df_rec) in zip(results_exp.items(), results_rec.items()):
-            df_exp.T.to_csv(os.path.join(save_path, 'summary_exp_' + model_exp + '.csv'), header=False)
-            df_rec.T.to_csv(os.path.join(save_path, 'summary_rec_' + model_rec + '.csv'), header=False)
+            df_exp.T.to_csv(os.path.join(save_path, ''.join(['summary_exp_', model_exp, '.csv'])), header=False)
+            df_rec.T.to_csv(os.path.join(save_path, ''.join(['summary_exp_', model_exp, '.csv'])), header=False)
 
         print("Model 2 Prediction is finished")
 
@@ -236,7 +235,9 @@ class SalesPredict(object):
         for data_type in data_types:
             for model in self.car_type:
                 res_data_hx[data_type].update({model: pd.read_csv(os.path.join(self.path_trend_hx, data_type,
-                                                                               data_type + '_' + model + '.csv'))})
+                                                                               ''.join(
+                                                                                   [data_type, '_', model, '.csv'])))})
+
         # Reservation discount
         res_data_hx['disc'] = res_data_hx['cnt_cum']
 
@@ -275,9 +276,9 @@ class SalesPredict(object):
 
     def _split_train_test_all(self, data: dict):
         result = {}
-        for type_key, type_val in data.items():    # Data type: cnt / util
+        for type_key, type_val in data.items():  # Data type: cnt / util
             model_dict = {}
-            for model_key, model_val in type_val.items():    # Model type: av_ad/ av_new / k3 / soul / vlst
+            for model_key, model_val in type_val.items():  # Model type: av_ad/ av_new / k3 / soul / vlst
                 train, test = self._split_train_test(x=model_val['x'], y=model_val['y'])
                 model_dict[model_key] = {'train': train, 'test': test}
             result[type_key] = model_dict
@@ -298,9 +299,9 @@ class SalesPredict(object):
     def _grid_search_cross_validation(self, data: dict, regr: str):
         # Grid search cross validation
         regr_bests = {}
-        for type_key, type_val in data.items():    # type_key: cnt / disc / util
+        for type_key, type_val in data.items():  # type_key: cnt / disc / util
             model_bests = {}
-            for model_key, model_val in type_val.items():    # model_key: av / k3 / vl
+            for model_key, model_val in type_val.items():  # model_key: av / k3 / vl
                 train = model_val['train']
                 regr_best = self._get_best_hyper_param(x=train['x'], y=train['y'],
                                                        regr=regr,
@@ -341,7 +342,8 @@ class SalesPredict(object):
         for type_key, type_val in regr_bests.items():
             for model_key, model_val in type_val.items():
                 best_params = model_val.get_params()
-                f = open(os.path.join(self.path_model, type_key, regr + '_params_' + model_key + '.pickle'), 'wb')
+                f = open(os.path.join(self.path_model, type_key,
+                                      ''.join([regr, '_params_', model_key, '.pickle'])), 'wb')
                 pickle.dump(best_params, f)
                 f.close()
 
@@ -367,7 +369,7 @@ class SalesPredict(object):
     def _get_disc_last_week(self, disc_confirm_last_week: str):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'disc_confirm')
-        disc_confirm = pd.read_csv(os.path.join(load_path, 'disc_confirm_' + disc_confirm_last_week + '.csv'),
+        disc_confirm = pd.read_csv(os.path.join(load_path, ''.join(['disc_confirm_', disc_confirm_last_week, '.csv'])),
                                    delimiter='\t', dtype={'date': str, 'model': str, 'disc': int})
         disc_confirm['date'] = pd.to_datetime(disc_confirm['date'], format='%Y%m%d')
 
@@ -380,13 +382,13 @@ class SalesPredict(object):
     def _get_capa_re(self, model_detail='car'):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_re = pd.read_csv(os.path.join(load_path, 'capa_re_' + model_detail + '.csv'), delimiter='\t',
+        capa_re = pd.read_csv(os.path.join(load_path, ''.join(['capa_re_', model_detail, '.csv'])), delimiter='\t',
                               dtype={'date': str, 'model': str, 'capa': int})
-        capa_init_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_' + model_detail + '.csv'),
-                                        delimiter='\t')
+        capa_unavail = pd.read_csv(os.path.join(load_path, ''.join(['capa_unavail_', model_detail, '.csv'])),
+                                   delimiter='\t')
 
         capa_re = self._conv_mon_to_day(df=capa_re, end_day='31')
-        capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_init_unavail)
+        capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_unavail)
 
         capa_re_dict = defaultdict(dict)
         for date, model, capa in zip(capa_re['date'], capa_re['model'], capa_re['capa']):
@@ -406,7 +408,7 @@ class SalesPredict(object):
     @staticmethod
     def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
         months = np.sort(df['date'].unique())
-        days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
+        days = pd.date_range(start=''.join([months[0], '01']), end=''.join([months[-1], end_day]))
         model_unique = df[['model', 'capa']].drop_duplicates()
 
         df_days = pd.DataFrame()
@@ -428,7 +430,8 @@ class SalesPredict(object):
     def _get_res_status(self):
         # Load recent reservation dataset
         load_path = os.path.join('..', 'input', 'res_status')
-        res_re = pd.read_csv(os.path.join(load_path, 'res_status_' + self.res_status_ud_day + '.csv'), delimiter='\t')
+        res_re = pd.read_csv(os.path.join(load_path, ''.join(['res_status_', self.res_status_ud_day, '.csv'])),
+                             delimiter='\t')
 
         # Rename columns
         res_remap_cols = {
@@ -533,7 +536,7 @@ class SalesPredict(object):
             date_len = len(date_range)
             fst = list(map(int, rent_t.split(':')))
             lst = list(map(int, return_t.split(':')))
-            ft = timedelta(hours=fst[0], minutes=fst[1])      # time of rent day
+            ft = timedelta(hours=fst[0], minutes=fst[1])  # time of rent day
             lt = timedelta(hours=lst[0] + 2, minutes=lst[1])  # time of return day
 
             f_util = 1
@@ -571,7 +574,7 @@ class SalesPredict(object):
         for data_type in self.data_type:
             model_bests = {}
             for model in self.car_type:
-                f = open(os.path.join(self.path_model, data_type, regr + '_params_' + model + '.pickle'), 'rb')
+                f = open(os.path.join(self.path_model, data_type, ''.join([regr, '_params_', model, '.pickle'])), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
             regr_bests[data_type] = model_bests
@@ -606,7 +609,7 @@ class SalesPredict(object):
             for data_type in self.data_type:
                 if data_type in ['disc']:
                     pred_input[model].update({data_type: np.array([season, lead_time_vec,
-                                              res_rate.get(model, 0)]).reshape(1, -1)})
+                                                                   res_rate.get(model, 0)]).reshape(1, -1)})
                 else:
                     pred_input[model].update({data_type: np.array([season, lead_time_vec,
                                                                    disc[model]]).reshape(1, -1)})
@@ -627,26 +630,27 @@ class SalesPredict(object):
                         lead_time_vec: int, fitted_model: dict, sales_per_res: dict, cdw_per_res: dict):
         # Calculate first row
         temp = defaultdict(dict)
-        for model, model_val in fitted_model.items():   # Model: ad_av / ad_new / k3 / soul / vlst
+        for model, model_val in fitted_model.items():  # Model: ad_av / ad_new / k3 / soul / vlst
             # Set current reservation status
-            res_cnt = init_data[0].get(model, 0)    # Current reservation counts
-            disc = init_data[2][model]                     # Current discount
+            res_cnt = init_data[0].get(model, 0)  # Current reservation counts
+            disc = init_data[2][model]  # Current discount
             exp_sales = init_data[3].get(model, 0)  # Current sales
             temp[model].update({'lead_time_vec': [lead_time_vec]})
             temp[model].update({'res_cnt': [res_cnt]})
             temp[model].update({'res_util': [round(init_data[1].get(model, 0), 1)]})
             temp[model].update({'disc': [disc]})
-            temp[model].update({'exp_sales': [exp_sales]})    # Expected sales
-            temp[model].update({'exp_cum_sales': [exp_sales]})    # Expected cum. sales
+            temp[model].update({'exp_sales': [exp_sales]})  # Expected sales
+            temp[model].update({'exp_cum_sales': [exp_sales]})  # Expected cum. sales
 
             capa = init_capa.get(model, 0)
 
             # Calculate current sales
-            for key, val in model_val.items():    # Type: cnt_inc / cnt_cum / util_inc / util_cum / disc
+            for key, val in model_val.items():  # Type: cnt_inc / cnt_cum / util_inc / util_cum / disc
                 if key in ['cnt_inc', 'cnt_cum']:
-                    temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0] * capa, 2)]})
+                    temp[model].update({''.join(['exp_', key]): [round(val.predict(pred_input[model][key])[0] * capa,
+                                                                       2)]})
                 else:
-                    temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0], 2)]})
+                    temp[model].update({''.join(['exp_', key]): [round(val.predict(pred_input[model][key])[0], 2)]})
 
         # Calculate continuous rows
         for lt_vec in np.arange(lead_time_vec + 1, 1):
@@ -657,7 +661,8 @@ class SalesPredict(object):
                 util = temp[model]['res_util'][-1] + temp[model]['exp_util_inc'][-1]
                 cnt = temp[model]['res_cnt'][-1] + temp[model]['exp_cnt_inc'][-1]
                 disc = temp[model]['exp_disc'][-1]
-                exp_sales = temp[model]['exp_cnt_inc'][-1] * (sales_per_res[model] * (1-disc/100) + cdw_per_res[model])
+                exp_sales = temp[model]['exp_cnt_inc'][-1] * (
+                        sales_per_res[model] * (1 - disc / 100) + cdw_per_res[model])
                 # Maximum Utilization rate : 100%
 
                 if util >= 1:
@@ -680,9 +685,11 @@ class SalesPredict(object):
                 pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc, capa=capa)
                 for type_key, type_val in model_val.items():
                     if type_key in ['cnt_inc', 'cnt_cum']:
-                        temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0] * capa, 2))
+                        temp[model][''.join(['exp_', type_key])].append(round(type_val.predict(pred_temp[type_key])[0]
+                                                                              * capa, 2))
                     else:
-                        temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0], 2))
+                        temp[model][''.join(['exp_', type_key])].append(round(type_val.predict(pred_temp[type_key])[0],
+                                                                              2))
 
         return temp
 
@@ -690,27 +697,28 @@ class SalesPredict(object):
                         lead_time_vec: int, fitted_model: dict, sales_per_res: dict, cdw_per_res: dict):
         # Calculate first row
         temp = defaultdict(dict)
-        for model, model_val in fitted_model.items():   # Model: ad_av / ad_new / k3 / soul / vlst
+        for model, model_val in fitted_model.items():  # Model: ad_av / ad_new / k3 / soul / vlst
             # Set current reservation status
-            res_cnt = init_data[0].get(model, 0)    # Current reservation counts
+            res_cnt = init_data[0].get(model, 0)  # Current reservation counts
             res_util = round(init_data[1].get(model, 0), 1)
-            disc = init_data[2][model]              # Current discount
+            disc = init_data[2][model]  # Current discount
             exp_sales = init_data[3].get(model, 0)  # Current sales
             temp[model].update({'lead_time_vec': [lead_time_vec]})
             temp[model].update({'res_cnt': [res_cnt]})
             temp[model].update({'res_util': [res_util]})
             temp[model].update({'disc': [disc]})
-            temp[model].update({'exp_sales': [exp_sales]})    # Expected sales
-            temp[model].update({'exp_cum_sales': [exp_sales]})    # Expected cum. sales
+            temp[model].update({'exp_sales': [exp_sales]})  # Expected sales
+            temp[model].update({'exp_cum_sales': [exp_sales]})  # Expected cum. sales
 
             capa = init_capa.get(model, 0)
 
             # Calculate current sales
-            for key, val in model_val.items():    # Type: cnt_inc / cnt_cum / util_inc / util_cum / disc
+            for key, val in model_val.items():  # Type: cnt_inc / cnt_cum / util_inc / util_cum / disc
                 if key in ['cnt_inc', 'cnt_cum']:
-                    temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0] * capa, 2)]})
+                    temp[model].update({''.join(['exp_', key]): [round(val.predict(pred_input[model][key])[0] * capa,
+                                                                       2)]})
                 else:
-                    temp[model].update({'exp_' + key: [round(val.predict(pred_input[model][key])[0], 2)]})
+                    temp[model].update({''.join(['exp_', key]): [round(val.predict(pred_input[model][key])[0], 2)]})
 
             # Calculate recommendation discount
             disc_chg = self._rec_disc_function(curr=res_util * 100, exp=temp[model]['exp_util_cum'][-1] * 100)
@@ -729,7 +737,8 @@ class SalesPredict(object):
                 util = temp[model]['res_util'][-1] + temp[model]['exp_util_inc'][-1]
                 cnt = temp[model]['res_cnt'][-1] + temp[model]['exp_cnt_inc'][-1]
                 disc = temp[model]['rec_disc'][-1]
-                exp_sales = temp[model]['exp_cnt_inc'][-1] * (sales_per_res[model] * (1-disc/100) + cdw_per_res[model])
+                exp_sales = temp[model]['exp_cnt_inc'][-1] * (
+                        sales_per_res[model] * (1 - disc / 100) + cdw_per_res[model])
 
                 # Maximum Utilization rate : 100%
                 if util >= 1:
@@ -752,9 +761,11 @@ class SalesPredict(object):
                 pred_temp = self._get_pred_input(season=season, lead_time_vec=lt_vec, res_cnt=cnt, disc=disc, capa=capa)
                 for type_key, type_val in model_val.items():
                     if type_key in ['cnt_inc', 'cnt_cum']:
-                        temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0] * capa, 2))
+                        temp[model][''.join(['exp_', type_key])].append(round(type_val.predict(pred_temp[type_key])[0]
+                                                                              * capa, 2))
                     else:
-                        temp[model]['exp_' + type_key].append(round(type_val.predict(pred_temp[type_key])[0], 2))
+                        temp[model][''.join(['exp_', type_key])].append(round(type_val.predict(pred_temp[type_key])[0],
+                                                                              2))
 
                 # Calculate recommendation discount
                 disc_chg = self._rec_disc_function(curr=util * 100, exp=temp[model]['exp_util_cum'][-1] * 100)
@@ -790,7 +801,7 @@ class SalesPredict(object):
             save_path_day = os.path.join(save_path, kinds, pred_day_str)
             if not os.path.exists(save_path_day):
                 os.mkdir(save_path_day)
-            pd.DataFrame(model_val).T.to_csv(os.path.join(save_path_day, 'sales_pred_' + model_key + '.csv'),
+            pd.DataFrame(model_val).T.to_csv(os.path.join(save_path_day, ''.join(['sales_pred_', model_key, '.csv'])),
                                              header=False)
 
     @staticmethod
@@ -803,8 +814,8 @@ class SalesPredict(object):
         """
 
         # Hyperparamters (need to tune)
-        theta1 = 1          # Ratio of Decreasing magnitude
-        if curr < exp:      # Ratio of increasing
+        theta1 = 1  # Ratio of Decreasing magnitude
+        if curr < exp:  # Ratio of increasing
             theta1 = 0.5
         theta2 = 0.05  # ratio of increasing / decreasing magnitude : demand
         phi_low = 1.7  # 1 < phi_low < phi_high < 2
@@ -930,7 +941,7 @@ class SalesPredict(object):
             save_path = os.path.join(self.path_sales_per_res, self.apply_day, 'img', pred_day_str)
             if not os.path.exists(save_path):
                 os.mkdir(save_path)
-            plt.savefig(os.path.join(save_path, 'sales_pred_' + exp_key + '.png'))
+            plt.savefig(os.path.join(save_path, ''.join(['sales_pred_', exp_key, '.png'])))
             plt.close()
 
     def _rearr_column(self, df: dict, pred_day: str, kinds: str):

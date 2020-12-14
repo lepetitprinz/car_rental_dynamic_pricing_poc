@@ -61,7 +61,7 @@ class TimeSeries(object):
         for visit, param_best in zip(['dom', 'for'], [best_param_dom, best_param_for]):
             best_params = {key: val for key, val in param_best[1][0]}
             best_model_params = {param_best[0]: best_params}
-            f = open(os.path.join(self.save_path, 'jeju_' + visit + '_best_params.pickle'), 'wb')
+            f = open(os.path.join(self.save_path, ''.join(['jeju_', visit, '_best_params.pickle'])), 'wb')
             pickle.dump(best_model_params, f)
             f.close()
 
@@ -69,7 +69,7 @@ class TimeSeries(object):
         # Load best parameters for model
         best_params = {}
         for visit in ['dom', 'for']:
-            f = open(os.path.join(self.save_path, 'jeju_' + visit + '_best_params.pickle'), 'rb')
+            f = open(os.path.join(self.save_path, ''.join(['jeju_', visit, '_best_params.pickle'])), 'rb')
             best_params[visit] = pickle.load(f)
             f.close()
 

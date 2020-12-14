@@ -92,8 +92,8 @@ class DiscRecommend(object):
     def _get_disc_confirm_last_week(self):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'disc_confirm')
-        disc_comfirm = pd.read_csv(os.path.join(load_path, 'disc_confirm_' + self.disc_confirm_last_week + '.csv'),
-                                   delimiter='\t', dtype={'date': str, 'disc': int})
+        disc_comfirm = pd.read_csv(os.path.join(load_path, ''.join(['disc_confirm_', self.disc_confirm_last_week,
+                                                '.csv'])), delimiter='\t', dtype={'date': str, 'disc': int})
         disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
         disc_comfirm_dict = defaultdict(dict)
         for model, date, disc in zip(disc_comfirm['model'], disc_comfirm['date'], disc_comfirm['disc']):
@@ -104,9 +104,9 @@ class DiscRecommend(object):
     def _load_init_data(self):
         # Capacity history of each car model
         load_path = os.path.join('..', 'input', 'capa')
-        capa_re = pd.read_csv(os.path.join(load_path, 'capa_re_' + self.model_detail + '.csv'), delimiter='\t',
+        capa_re = pd.read_csv(os.path.join(load_path, ''.join(['capa_re_', self.model_detail, '.csv'])), delimiter='\t',
                               dtype={'date': str, 'model': str, 'capa': int})
-        capa_re_unavail = pd.read_csv(os.path.join(load_path, 'capa_unavail_' + self.model_detail + '.csv'),
+        capa_re_unavail = pd.read_csv(os.path.join(load_path, ''.join(['capa_unavail_', self.model_detail, '.csv'])),
                                       delimiter='\t')
 
         capa_re = self._conv_mon_to_day(df=capa_re, end_day='28')
@@ -252,6 +252,7 @@ class DiscRecommend(object):
     def _rec_disc(self, input_dict: dict):
         rec_output = {}
         for model, df in input_dict.items():
+            # util_rate: float (0.xx)
             df['rec_disc_chg_rate'] = df[['curr_util_rate', 'exp_util_rate']].apply(self._get_rec, axis=1)
             df['rec_disc'] = df['applied_disc'] * (1 + df['rec_disc_chg_rate'] / 100)
             df = df.drop(columns=['rec_disc_chg_rate'], errors='ignore')
@@ -264,7 +265,30 @@ class DiscRecommend(object):
         # return self._rec_disc_function(curr=x[0], exp=x[1], dmd=self.exp_dmd_change)
 
     @staticmethod
-    def _rec_disc_function(curr: float, exp: float, dmd: float):
+    def _rec_disc_function(curr: float, exp: float, dmd=0):
+        """
+        Recommendation Objective function
+        curr: Current Utilization Rate (0 < curr < 1)
+        exp: Expected Utilization rate (0 < exp < 1)
+        dmd: Expected Demand Change Rate (float)
+        """
+        # Hyper-parameters (need to tune)
+        theta_1 = 1     # Ratio of Decreasing magnitude
+        if curr < exp:  # Ratio of increasing magnitude
+            theta1 = 0.7
+        theta_2 = 1     # Ratio of Demand magnitude
+
+        # Suggestion curve bend
+        # 1 < phi_low < phi_high < 2
+        # phi_low = 1.7
+        phi_high = 1.2
+
+        y = 1 - theta_1 * (curr ** (phi_high ** (-1 * curr)) - exp * (1 - theta_2 * dmd))
+
+        return y
+
+    @staticmethod
+    def _rec_disc_function_BAK(curr: float, exp: float, dmd: float):
         """
         Recommendation Objective function
         curr: Current Utilization Rate
