@@ -1,3 +1,5 @@
+from Utility import Utility
+
 import os
 import copy
 import pickle
@@ -22,6 +24,7 @@ class SalesPredict(object):
                   "extr": ExtraTreesRegressor}
 
     def __init__(self, res_status_ud_day: str, apply_day: str, disc_confirm_last_week: str, end_date: str):
+        self.utility = Utility
         # Initial values of variables
         self.res_status_ud_day = res_status_ud_day
         self.apply_day = apply_day
@@ -30,18 +33,17 @@ class SalesPredict(object):
         self.end_date = end_date
 
         # Path of data & model
-        self.path_input = os.path.join('..', 'input')
+        self.path_input = self.utility.PATH_INPUT
         self.path_model = os.path.join('..', 'result', 'model', 'res_pred_lead_time')
         self.path_trend_hx = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
         self.path_sales_per_res = os.path.join('..', 'result', 'data', 'sales_prediction')
 
         # Data & model types
-        self.data_type = ['cnt_inc', 'cnt_cum', 'util_inc', 'util_cum', 'disc']
-        self.car_type = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
-        self.model_1_6 = ['아반떼 AD (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
-                          'ALL NEW K3 (G)', '쏘울 (G)', '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
-        self.model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
-                             'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
+        self.type_data = ['cnt_inc', 'cnt_cum', 'util_inc', 'util_cum', 'disc']
+
+        self.grade_1_6 = self.utility.GRADE_1_6
+        self.type_model = self.utility.TYPE_MODEL
+        self.model_nm_map = self.utility.MODEL_NAME_MAP
 
         # Initial Setting
         self.random_state = 2020  # Data split randomness
@@ -76,7 +78,7 @@ class SalesPredict(object):
         res_hx = self._load_data_hx()
 
         # Filter 1.6 grade models
-        res_hx = res_hx[res_hx['res_model_nm'].isin(self.model_1_6)]
+        res_hx = res_hx[res_hx['res_model_nm'].isin(self.grade_1_6)]
         res_hx = res_hx.reset_index(drop=True)
 
         res_hx = self._cluster_by_group(df=res_hx)
@@ -192,7 +194,7 @@ class SalesPredict(object):
             df['res_model_nm'] == 'ALL NEW K3 (G)',
             df['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)']),
             df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
-        values = self.car_type
+        values = self.type_model
         df['res_model'] = np.select(conditions, values)
 
         return df
@@ -230,10 +232,10 @@ class SalesPredict(object):
 
         # Load history trend
         res_data_hx = defaultdict(dict)
-        data_types = copy.deepcopy(self.data_type)
+        data_types = copy.deepcopy(self.type_data)
         data_types.remove('disc')
         for data_type in data_types:
-            for model in self.car_type:
+            for model in self.type_model:
                 res_data_hx[data_type].update({model: pd.read_csv(os.path.join(self.path_trend_hx, data_type,
                                                                                ''.join(
                                                                                    [data_type, '_', model, '.csv'])))})
@@ -259,9 +261,9 @@ class SalesPredict(object):
 
     def _split_input_target_all(self):
         io = {}
-        for data_type in self.data_type:
+        for data_type in self.type_data:
             io_model = {}
-            for model in self.car_type:
+            for model in self.type_model:
                 split = self._split_input_target(data_type=data_type, model=model)
                 io_model[model] = split
             io[data_type] = io_model
@@ -354,7 +356,7 @@ class SalesPredict(object):
         self.capacity_re = self._get_capa_re()
         self.season_re = self._get_season_re()
         self.disc_confirmed = self._get_disc_last_week(disc_confirm_last_week=self.disc_confirm_last_week)
-        self.lt, self.lt_vec, self.lt_to_lt_vec = self._get_lead_time()
+        self.lt, self.lt_vec, self.lt_to_lt_vec = self.utility.get_lead_time()
 
     @staticmethod
     def _get_season_re():
@@ -434,19 +436,10 @@ class SalesPredict(object):
                              delimiter='\t')
 
         # Rename columns
-        res_remap_cols = {
-            '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
-            '고객구분': 'cust_kind', '고객구분명': 'cust_kind_nm', '총 청구액(VAT포함)': 'tot_fee',
-            '예약모델': 'res_model', '예약모델명': 'res_model_nm', '차급': 'car_grd',
-            '대여일': 'rent_day', '대여시간': 'rent_time', '반납일': 'return_day', '반납시간': 'return_time',
-            '대여기간(일)': 'rent_period_day', '대여기간(시간)': 'rent_period_time',
-            'CDW요금': 'cdw_fee', '할인유형': 'discount_type', '할인유형명': 'discount_type_nm',
-            '적용할인명': 'applyed_discount', '적용할인율(%)': 'discount', '회원등급': 'member_grd',
-            '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
-        res_re = res_re.rename(columns=res_remap_cols)
+        res_re = res_re.rename(columns=self.utility.RENAME_COL_RES)
 
         # filter only 1.6 grade car group
-        res_re = res_re[res_re['res_model_nm'].isin(self.model_1_6)]
+        res_re = res_re[res_re['res_model_nm'].isin(self.grade_1_6)]
 
         # Group Car Model
         res_re = self._cluster_by_group(df=res_re)
@@ -571,9 +564,9 @@ class SalesPredict(object):
 
     def _load_best_params(self, regr: str):
         regr_bests = {}
-        for data_type in self.data_type:
+        for data_type in self.type_data:
             model_bests = {}
-            for model in self.car_type:
+            for model in self.type_model:
                 f = open(os.path.join(self.path_model, data_type, ''.join([regr, '_params_', model, '.pickle'])), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
@@ -605,8 +598,8 @@ class SalesPredict(object):
 
     def _get_pred_input_init(self, season: int, lead_time_vec: int, disc: dict, res_rate: dict):
         pred_input = defaultdict(dict)
-        for model in self.car_type:
-            for data_type in self.data_type:
+        for model in self.type_model:
+            for data_type in self.type_data:
                 if data_type in ['disc']:
                     pred_input[model].update({data_type: np.array([season, lead_time_vec,
                                                                    res_rate.get(model, 0)]).reshape(1, -1)})
@@ -618,7 +611,7 @@ class SalesPredict(object):
 
     def _get_pred_input(self, season: int, lead_time_vec: int, res_cnt: int, disc: int, capa: int):
         pred_input = defaultdict(dict)
-        for data_type in self.data_type:
+        for data_type in self.type_data:
             if data_type in ['disc']:
                 pred_input[data_type] = np.array([season, lead_time_vec, res_cnt / capa]).reshape(1, -1)
             else:

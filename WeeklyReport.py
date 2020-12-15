@@ -1,3 +1,5 @@
+from Utility import Utility
+
 import os
 import pickle
 import datetime as dt
@@ -18,6 +20,7 @@ class WeeklyReport(object):
     def __init__(self, res_status_last_week: str, res_status_this_week: str, res_status_cancel_this_week: str,
                  res_confirm_last_week: str, disc_confirm_last_week: str, disc_rec_last_week: str,
                  start_day: str, end_day: str, apply_last_week: str, apply_this_week: str):
+        self.utility = Utility
         # Path
         self.path_hx_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
         self.path_model = os.path.join('..', 'result', 'model', 'res_prediction')
@@ -33,6 +36,7 @@ class WeeklyReport(object):
         self.apply_last_week = apply_last_week
         self.start_day = start_day
         self.end_day = end_day
+
         # Data
         self.res_re: pd.DataFrame = pd.DataFrame()
         self.cancel_re: pd.DataFrame = pd.DataFrame()
@@ -40,29 +44,24 @@ class WeeklyReport(object):
         self.disc_confirm: dict = {}
         self.disc_rec: dict = {}
         self.season_re: dict = {}
+
         # data type
-        self.data_type: list = ['cnt', 'disc', 'util']
-        self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
-        self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
+        self.type_data: list = self.utility.TYPE_DATA
+        self.type_data_map: dict = self.utility.TYPE_DATA_MAP
+        self.type_model: list = self.utility.TYPE_MODEL
+        self.model_nm_map: dict = self.utility.MODEL_NAME_MAP
+        self.model_nm_map_rev: dict = self.utility.MODEL_NAME_MAP_REV
 
         # inintialize mapping dictionary
         self.data_hx_map: dict = dict()
         self.split_map: dict = dict()
         self.rent_fee_hx: dict = {}
         self.rent_cdw_hx: dict = {}
-        self.day_to_season: dict = {}
 
         # car grade
-        self.grade_1_6 = ['ALL NEW K3 (G)', '아반떼 AD (G) F/L', '올 뉴 아반떼 (G)',
-                          '쏘울 부스터 (G)', '더 올 뉴 벨로스터 (G)']
-        self.model_type = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
-        self.model_type_map = {'av_ad': '아반떼 AD (G) F/L', 'av_new': '올 뉴 아반떼 (G)',
-                               'k3': 'ALL NEW K3 (G)', 'soul': '쏘울 부스터 (G)',
-                               'vlst': '더 올 뉴 벨로스터 (G)'}
+        self.grade_1_6 = self.utility.GRADE_1_6
         self.model_type_map_grp = {'av_ad': 'AVANTE', 'av_new': 'AVANTE', 'k3': 'K3',
                                    'vlst': 'VELOSTER', 'soul': 'SOUL'}
-        self.model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
-                             'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
         self.model_grp = {'av_ad': 'av', 'av_new': 'av', 'k3': 'k3', 'soul': 'su', 'vlst': 'vl'}
         self.status_cancel = ['취소', 'no show']
         self.drop_col_res = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm',
@@ -72,17 +71,16 @@ class WeeklyReport(object):
         self.drop_col_cancel = ['return_datetime', 'res_channel', 'customer_number', 'tot_fee',
                                 'res_model_nm', 'status']
 
-    def post_process(self):
+    def post_process(self, type_apply: str):
         # Load dataset
         res_last_week, res_this_week, res_cancel_this_week, res_confirmed = self._load_data()
 
         #
         self._load_fee_hx()
-        self.day_to_season = self._get_seasonal_map()
-        self.capa_re = self._get_capa_re()
-        self.disc_confirm = self._get_disc_confirm_last_week()
+        self.capa_re = self._get_capacity(time='re', type_apply=type_apply)
+        self.season_re = self._get_season(time='re')
         self.disc_rec = self._get_disc_rec()
-        self.season_re = self._get_season_re()
+        self.disc_confirm = self._get_disc_confirm_last_week()
 
         # Change data type
         res_last_week['rent_day'] = pd.to_datetime(res_last_week['rent_day'], format='%Y-%m-%d')
@@ -116,9 +114,8 @@ class WeeklyReport(object):
         res_cancel_this_week = res_cancel_this_week[res_cancel_this_week['status'].isin(self.status_cancel)]
 
         # Group
-        res_last_week = self._group_model(df=res_last_week)
-        res_this_week = self._group_model(df=res_this_week)
-        res_cancel_this_week = self._group_model(df=res_cancel_this_week)
+        res_this_week = self.utility.cluster_model(df=res_this_week, type_apply=type_apply)
+        res_cancel_this_week = self.utility.cluster_model(df=res_cancel_this_week, type_apply=type_apply)
 
         # Drop Unnecessary columns
         res_last_week = res_last_week.drop(columns=self.drop_col_res, errors='ignore')
@@ -139,20 +136,20 @@ class WeeklyReport(object):
         cnt_cancel_this_week = cnt_cancel_this_week.rename(columns={'res_num': 'canceled'})
 
         # Change to utilization rate
-        util_last_week = self._get_res_util(df=res_last_week)
-        util_this_week = self._get_res_util(df=res_this_week)
+        util_last_week = self.utility.get_res_util(df=res_last_week)
+        util_this_week = self.utility.get_res_util(df=res_this_week)
 
-        util_last_week_grp = util_last_week.groupby(by=['model', 'rent_day']).sum()['util']
-        util_this_week_grp = util_this_week.groupby(by=['model', 'rent_day']).sum()['util']
+        util_last_week_grp = util_last_week.groupby(by=['res_model', 'rent_day']).sum()['util']
+        util_this_week_grp = util_this_week.groupby(by=['res_model', 'rent_day']).sum()['util']
         util_last_week_grp = util_last_week_grp.reset_index(level=(0, 1))
         util_this_week_grp = util_this_week_grp.reset_index(level=(0, 1))
 
         util_last_week_grp['rent_mon'] = util_last_week_grp['rent_day'].dt.strftime('%Y%m')
         util_this_week_grp['rent_mon'] = util_this_week_grp['rent_day'].dt.strftime('%Y%m')
-        util_last_week_grp['util_rate'] = util_last_week_grp[['rent_mon', 'model', 'util']].apply(self._calc_util_rate,
-                                                                                                  axis=1)
-        util_this_week_grp['util_rate'] = util_this_week_grp[['rent_mon', 'model', 'util']].apply(self._calc_util_rate,
-                                                                                                  axis=1)
+        util_last_week_grp['util_rate'] = util_last_week_grp[['rent_mon', 'res_model',
+                                                              'util']].apply(self._calc_util_rate, axis=1)
+        util_this_week_grp['util_rate'] = util_this_week_grp[['rent_mon', 'res_model',
+                                                              'util']].apply(self._calc_util_rate, axis=1)
         util_last_week_grp = util_last_week_grp.drop(columns=['rent_mon'])
         util_this_week_grp = util_this_week_grp.drop(columns=['rent_mon'])
 
@@ -163,8 +160,8 @@ class WeeklyReport(object):
         util_this_week_grp['util_rate'] = np.round(util_this_week_grp['util_rate'].to_numpy() * 100, 1)
 
         # Reservation applying discount
-        disc_last_week = util_last_week.groupby(by=['model', 'rent_day']).mean()['discount']
-        disc_this_week = util_this_week.groupby(by=['model', 'rent_day']).mean()['discount']
+        disc_last_week = util_last_week.groupby(by=['res_model', 'rent_day']).mean()['discount']
+        disc_this_week = util_this_week.groupby(by=['res_model', 'rent_day']).mean()['discount']
         disc_last_week = disc_last_week.reset_index(level=(0, 1))
         disc_this_week = disc_this_week.reset_index(level=(0, 1))
 
@@ -174,14 +171,14 @@ class WeeklyReport(object):
 
         # Merge
 
-        result_last_week = pd.merge(util_last_week_grp, disc_last_week, how='left', on=['model', 'rent_day'],
+        result_last_week = pd.merge(util_last_week_grp, disc_last_week, how='left', on=['res_model', 'rent_day'],
                                     left_index=True, right_index=False)
-        result_last_week = pd.merge(result_last_week, cnt_last_week, how='left', on=['model', 'rent_day'],
+        result_last_week = pd.merge(result_last_week, cnt_last_week, how='left', on=['res_model', 'rent_day'],
                                     left_index=True, right_index=False)
 
-        result_this_week = pd.merge(util_this_week_grp, disc_this_week, how='left', on=['model', 'rent_day'],
+        result_this_week = pd.merge(util_this_week_grp, disc_this_week, how='left', on=['res_model', 'rent_day'],
                                     left_index=True, right_index=False)
-        result_this_week = pd.merge(result_this_week, cnt_this_week, how='left', on=['model', 'rent_day'],
+        result_this_week = pd.merge(result_this_week, cnt_this_week, how='left', on=['res_model', 'rent_day'],
                                     left_index=True, right_index=False)
 
         # Rename columns
@@ -190,9 +187,9 @@ class WeeklyReport(object):
         result_this_week = result_this_week.rename(columns={'res_num': 'cnt_this_week', 'util': 'util_this_week',
                                                    'util_rate': 'util_rate_af', 'discount': 'disc_this_week'})
 
-        result = pd.merge(result_last_week, result_this_week, how='outer', on=['model', 'rent_day'],
+        result = pd.merge(result_last_week, result_this_week, how='outer', on=['res_model', 'rent_day'],
                           left_index=True, right_index=False)
-        result = pd.merge(result, cnt_cancel_this_week, how='left', on=['model', 'rent_day'],
+        result = pd.merge(result, cnt_cancel_this_week, how='left', on=['res_model', 'rent_day'],
                           left_index=True, right_index=False)
 
         # Filter days
@@ -202,17 +199,17 @@ class WeeklyReport(object):
         result = result.fillna(0)
 
         # Add Season
-        result['season'] = result['rent_day'].apply(lambda x: self.day_to_season[x])
+        result['season'] = result['rent_day'].apply(lambda x: self.season_re[x])
 
         # Add capacity columns
         result['rent_mon'] = result['rent_day'].dt.strftime('%Y%m')
-        result['capa'] = result[['rent_mon', 'model']].apply(self._set_capa, axis=1)
+        result['capa'] = result[['rent_mon', 'res_model']].apply(self._set_capa, axis=1)
         result['cnt_rate_last_week'] = result['cnt_last_week'] / result['capa']
         result['cnt_rate_this_week'] = result['cnt_this_week'] / result['capa']
 
         # sales
-        result['sales_per_res'] = result[['season', 'model']].apply(self._set_fee, kinds='fee', axis=1)
-        result['cdw_fee'] = result[['season', 'model']].apply(self._set_fee, kinds='cdw', axis=1)
+        result['sales_per_res'] = result[['season', 'res_model']].apply(self._set_fee, kinds='fee', axis=1)
+        result['cdw_fee'] = result[['season', 'res_model']].apply(self._set_fee, kinds='cdw', axis=1)
 
         # Calculate season and lead time
         result_dict = {}
@@ -244,9 +241,9 @@ class WeeklyReport(object):
         # fit the model
         fitted = self._fit_model(dataset=io, regr='extr', params=extr_bests)
 
-        for model in self.model_type:   # av_ad / av_new / k3 / soul / vlst
+        for model in self.type_model:   # av_ad / av_new / k3 / soul / vlst
             date_df = pd.DataFrame({'rent_day': date_range, 'season': season, 'lead_time': lt_af_vec})
-            temp = result[result['model'] == model].sort_values(by='rent_day')
+            temp = result[result['res_model'] == model].sort_values(by='rent_day')
             temp = temp.reset_index(drop=True)
             temp = pd.merge(date_df, temp, how='left', on=['rent_day', 'season'], left_index=True, right_index=False)
             temp = temp.fillna(0)
@@ -300,12 +297,13 @@ class WeeklyReport(object):
 
         print("")
 
-    def calc_sales(self, res_confirm_day_from: str, res_confirm_day_to: str, apply_last_week: str):
+    def calc_sales(self, res_confirm_day_from: str, res_confirm_day_to: str, apply_last_week: str,
+                   type_apply: str):
         res_confirm_day_from_dt = dt.datetime.strptime(res_confirm_day_from, '%y%m%d')
         res_confirm_day_to_dt = dt.datetime.strptime(res_confirm_day_to, '%y%m%d')
 
         # Load dataset
-        res_last_week, res_this_week, res_cancel, res_confirmed = self._load_data()
+        res_last_week, res_this_week, res_cancel, res_confirmed = self._load_data(time='re')
 
         # Change data type
         res_confirmed['rent_day'] = pd.to_datetime(res_confirmed['rent_day'], format='%Y-%m-%d')
@@ -315,7 +313,7 @@ class WeeklyReport(object):
         res_confirmed = res_confirmed[res_confirmed['res_model_nm'].isin(self.grade_1_6)]
 
         # Group
-        res_confirmed = self._group_model(df=res_confirmed)
+        res_confirmed = self.utility.cluster_model(df=res_confirmed, type_apply=type_apply)
 
         # Drop Unnecessary columns
         res_confirmed = res_confirmed.drop(columns=self.drop_col_res, errors='ignore')
@@ -334,10 +332,10 @@ class WeeklyReport(object):
         # res_last_week_new = res_last_week_new.fillna('reserve')
         # res_last_week_new = res_last_week_new[res_last_week_new['status'] == 'reserve']
 
-        tot_sales = res_confirmed.groupby(by=['model', 'rent_day']).sum()['tot_fee']
+        tot_sales = res_confirmed.groupby(by=['res_model', 'rent_day']).sum()['tot_fee']
         tot_sales = tot_sales.reset_index(level=(0, 1))
 
-        tot_sales_last_week = res_confirmed_last_week.groupby(by=['model', 'rent_day']).sum()['tot_fee']
+        tot_sales_last_week = res_confirmed_last_week.groupby(by=['res_model', 'rent_day']).sum()['tot_fee']
         tot_sales_last_week = tot_sales_last_week.reset_index(level=(0, 1))
 
         # Filter datetimes
@@ -349,7 +347,7 @@ class WeeklyReport(object):
 
         tot_sales_last_week = tot_sales_last_week.rename(columns={'tot_fee': 'tot_fee_last_week'})
 
-        sales = pd.merge(tot_sales, tot_sales_last_week, how='outer', on=['model', 'rent_day'],
+        sales = pd.merge(tot_sales, tot_sales_last_week, how='outer', on=['res_model', 'rent_day'],
                          left_index=True, right_index=False)
 
         # Save result
@@ -369,7 +367,7 @@ class WeeklyReport(object):
 
     def _get_pred_input(self, season, lead_time, cnt, disc):
         pred_input = {}
-        for data_type in self.data_type:
+        for data_type in self.type_data:
             if data_type == 'disc':
                 pred_input[data_type] = np.array([season, lead_time, cnt]).T
             else:
@@ -379,9 +377,9 @@ class WeeklyReport(object):
 
     def _load_data_hx(self):
         data_hx_map = defaultdict(dict)
-        for data_type in self.data_type:    # cnt / disc / util
-            for model in self.car_type:     # av_ad / av_new / k3 / soul / vlst
-                data_type_name = self.data_type_map[data_type]
+        for data_type in self.type_data:    # cnt / disc / util
+            for model in self.type_model:     # av_ad / av_new / k3 / soul / vlst
+                data_type_name = self.type_data_map[data_type]
                 data_hx_map[data_type].update({model: pd.read_csv(os.path.join(self.path_hx_data,
                                                data_type_name, data_type_name + '_' + model + '.csv'))})
 
@@ -402,9 +400,9 @@ class WeeklyReport(object):
 
     def _split_input_target_all(self):
         io = {}
-        for data_type in self.data_type:
+        for data_type in self.type_data:
             io_model = {}
-            for model in self.model_type:
+            for model in self.type_model:
                 split = self._split_to_input_target(data_type=data_type, model=model)
                 io_model[model] = split
             io[data_type] = io_model
@@ -419,9 +417,9 @@ class WeeklyReport(object):
 
     def _load_best_params(self, regr: str, model_detail='car'):
         regr_bests = {}
-        for data_type in self.data_type:    # cnt / disc / util
+        for data_type in self.type_data:    # cnt / disc / util
             model_bests = {}
-            for model in self.model_type:   # av_ad / av_new / k3 / soul / vlst
+            for model in self.type_model:   # av_ad / av_new / k3 / soul / vlst
                 f = open(os.path.join(self.path_model, model_detail, data_type,
                                       regr + '_params_' + self.model_grp[model] + '.pickle'), 'rb')
                 model_bests[model] = pickle.load(f)
@@ -444,27 +442,16 @@ class WeeklyReport(object):
     def _calc_util_rate(self, x):
         return x[2] / self.capa_re[(x[0], x[1])]
 
-    def _load_data(self):
+    def _load_data(self, time: str):
         # Load recent reservation dataset
-        data_path = os.path.join('..', 'input', 'res_status')
-        res_last_week = pd.read_csv(os.path.join(data_path, 'res_status_' + self.res_status_last_week + '.csv'),
-                                    delimiter='\t')
-        res_this_week = pd.read_csv(os.path.join(data_path, 'res_status_' + self.res_status_this_week + '.csv'),
-                                    delimiter='\t')
+        res_last_week = self.utility.get_res(time=time, status_update_day=self.res_status_last_week)
+        res_this_week = self.utility.get_res(time=time, status_update_day=self.res_status_this_week)
         data_path = os.path.join('..', 'input', 'res_confirm')
         res_confirmed = pd.read_csv(os.path.join(data_path, 'res_confirm_' + self.res_confirm_last_week + '.csv'),
                                     delimiter='\t')
 
         # Rename columns
-        res_remap_cols = {
-            '예약경로': 'res_route', '예약경로명': 'res_route_nm', '계약번호': 'res_num',
-            '고객구분': 'cust_kind', '고객구분명': 'cust_kind_nm', '총 청구액(VAT포함)': 'tot_fee',
-            '예약모델': 'res_model', '예약모델명': 'res_model_nm', '차급': 'car_grd',
-            '대여일': 'rent_day', '대여시간': 'rent_time', '반납일': 'return_day', '반납시간': 'return_time',
-            '대여기간(일)': 'rent_period_day', '대여기간(시간)': 'rent_period_time',
-            'CDW요금': 'cdw_fee', '할인유형': 'discount_type', '할인유형명': 'discount_type_nm',
-            '적용할인명': 'applied_discount', '적용할인율(%)': 'discount', '회원등급': 'member_grd',
-            '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
+        res_remap_cols = self.utility.RENAME_COL_RES
         res_last_week = res_last_week.rename(columns=res_remap_cols)
         res_this_week = res_this_week.rename(columns=res_remap_cols)
         res_confirmed = res_confirmed.rename(columns=res_remap_cols)
@@ -488,14 +475,12 @@ class WeeklyReport(object):
 
         return res_last_week, res_this_week, cancel_this_week, res_confirmed
 
-    def _get_capa_re(self):
+    def _get_capacity(self, time: str, type_apply: str):
         # Initial capacity of each model
-        load_path = os.path.join('..', 'input', 'capa')
-        capa_init = pd.read_csv(os.path.join(load_path, 'capa_re_car.csv'), delimiter='\t',
-                                dtype={'date': str, 'model': str, 'capa': int})
-        capa_re = {(date, self.model_nm_map[model]): capa for date, model, capa in zip(capa_init['date'],
-                                                                                       capa_init['model'],
-                                                                                       capa_init['capa'])}
+        capacity = self.utility.get_capacity(time=time, type_apply=type_apply)
+        capa_re = {(date, self.model_nm_map[model]): capa for date, model, capa in zip(capacity['date'],
+                                                                                       capacity['model'],
+                                                                                       capacity['capa'])}
 
         return capa_re
 
@@ -526,84 +511,12 @@ class WeeklyReport(object):
 
         return disc_rec
 
-    @staticmethod
-    def _get_season_re():
+    def _get_season(self, time: str):
         # Load recent seasonality dataset
-        load_path = os.path.join('..', 'input', 'seasonality')
-        ss_curr = pd.read_csv(os.path.join(load_path, 'seasonality_curr.csv'), delimiter='\t')
-        ss_curr['date'] = pd.to_datetime(ss_curr['date'], format='%Y%m%d')
-        season_map = {day: season for day, season in zip(ss_curr['date'], ss_curr['seasonality'])}
+        season_re = self.utility.get_season(time=time)
+        season_map = {day: season for day, season in zip(season_re['rent_day'], season_re['seasonality'])}
 
         return season_map
-
-    def _group_model(self, df: pd.DataFrame):
-        # Group Car Model
-        conditions = [
-            df['res_model_nm'] == '아반떼 AD (G) F/L',
-            df['res_model_nm'] == '올 뉴 아반떼 (G)',
-            df['res_model_nm'] == 'ALL NEW K3 (G)',
-            df['res_model_nm'] == '쏘울 부스터 (G)',
-            df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
-        values = self.model_type
-        df['model'] = np.select(conditions, values)
-
-        return df
-
-    @staticmethod
-    def _get_res_util(df: pd.DataFrame):
-        res_util = []
-        for rent_d, rent_t, return_d, return_t, res_day, discount, model in zip(
-                df['rent_day'], df['rent_time'], df['return_day'], df['return_time'],
-                df['res_day'], df['discount'], df['model']):
-
-            day_hour = timedelta(hours=24)
-            six_hour = timedelta(hours=6)
-            date_range = pd.date_range(start=rent_d, end=return_d)  # days of rent periods
-            date_len = len(date_range)
-            fst = list(map(int, rent_t.split(':')))
-            lst = list(map(int, return_t.split(':')))
-            ft = timedelta(hours=fst[0], minutes=fst[1])      # time of rent day
-            lt = timedelta(hours=lst[0] + 2, minutes=lst[1])  # time of return day
-
-            f_util = 1
-            l_util = 1
-            # Classify reservation periods
-            # If periods is more than 6 hours, utilization is 1
-            if (day_hour - ft) < six_hour:
-                f_util = (day_hour - ft) / six_hour
-            # If periods is less than 6 hours, utilization is
-            if lt < six_hour:
-                l_util = lt / six_hour
-
-            if date_len > 2:
-                util = np.array(f_util)
-                util = np.append(util, np.ones(date_len - 2))
-                util = np.append(util, l_util)
-
-            elif date_len == 2:
-                util = np.array([f_util, l_util])
-
-            else:
-                util = 1
-                if (lt - ft) < six_hour:
-                    util = (lt - ft) / six_hour
-                util = np.array([util])
-
-            res_util.extend(np.array([
-                date_range, [res_day] * date_len, util, [discount] * date_len, [model] * date_len]).T)
-        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util', 'discount', 'model'])
-
-        return res_util_df
-
-    @staticmethod
-    def _get_seasonal_map():
-        # Load recent seasonality dataset
-        load_path = os.path.join('..', 'input', 'seasonality')
-        ss_curr = pd.read_csv(os.path.join(load_path, 'seasonality_curr.csv'), delimiter='\t')
-        ss_curr['date'] = pd.to_datetime(ss_curr['date'], format='%Y%m%d')
-        day_to_season = {day: season for day, season in zip(ss_curr['date'], ss_curr['seasonality'])}
-
-        return day_to_season
 
     def _load_fee_hx(self):
         sales_per_res = pd.read_csv(os.path.join(self.path_sales_per_res, 'sales_per_res.csv'), encoding='euc-kr')

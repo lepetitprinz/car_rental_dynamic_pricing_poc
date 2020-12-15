@@ -1,3 +1,5 @@
+from Utility import Utility
+
 import os
 import datetime as dt
 from collections import defaultdict
@@ -9,29 +11,28 @@ import pandas as pd
 
 class DiscRecommend(object):
 
-    def __init__(self, res_update_day: str, apply_day: str, model_detail: str,
+    def __init__(self, res_status_ud_day: str, apply_day: str, model_detail: str,
                  disc_confirm_last_week: str):
-        # Inintial dataset
-        self.res_update_day = res_update_day
+        self.utility = Utility
+        # Initial data
+        self.res_update_day = res_status_ud_day
         self.apply_day = apply_day
         self.disc_confirm_last_week = disc_confirm_last_week
-        self.model_detail = model_detail
+        self.type_apply = model_detail
         self.capa_re: dict = dict()
         self.season: pd.DataFrame = pd.DataFrame()
         self.dmd_pred: pd.DataFrame = pd.DataFrame()
 
-        # Data Type
-        self.data_type: list = ['cnt', 'disc', 'util']
-        self.data_type_map: dict = {'cnt': 'cnt_cum', 'disc': 'cnt_cum', 'util': 'util_cum'}
+        # Data types
+        self.type_data: list = self.utility.TYPE_DATA
+        self.type_data_map: dict = self.utility.TYPE_DATA_MAP
 
-        self.model_type: list = ['av', 'k3', 'vl', 'su']
-        self.car_type: list = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
-        self.detail_type: dict = {'model': self.model_type, 'car': self.car_type}
-        self.model_nm_map = {'아반떼 AD (G) F/L': 'av_ad', '올 뉴 아반떼 (G)': 'av_new',
-                             'ALL NEW K3 (G)': 'k3', '쏘울 부스터 (G)': 'soul', '더 올 뉴 벨로스터 (G)': 'vlst'}
-        self.model_type_map = {'av_ad': '아반떼 AD (G) F/L', 'av_new': '올 뉴 아반떼 (G)',
-                               'k3': 'ALL NEW K3 (G)', 'soul': '쏘울 부스터 (G)',
-                               'vlst': '더 올 뉴 벨로스터 (G)'}
+        # Car types
+        self.model_nm_map: dict = self.utility.MODEL_NAME_MAP
+        self.model_nm_map_rev: dict = self.utility.MODEL_NAME_MAP_REV
+        self.type_group: list = self.utility.TYPE_GROUP
+        self.type_model: list = self.utility.TYPE_MODEL
+        self.type_apply: dict = {'model': self.type_group, 'car': self.type_model}
 
         # dataset on prediction day
         self.res_pred: dict = dict()       # key: av / k3 / vl / su
@@ -43,8 +44,8 @@ class DiscRecommend(object):
         self.rec_input: dict = dict()
         self.exp_dmd_change: float = 0.
 
-    def rec(self, pred_days: list):
-        self._load_init_data()
+    def rec(self, pred_days: list, type_apply: str):
+        self._set_necessary_data(type_apply=type_apply)
         self.disc_confirm = self._get_disc_confirm_last_week()
 
         summary = defaultdict(list)
@@ -101,14 +102,11 @@ class DiscRecommend(object):
 
         return disc_comfirm_dict
 
-    def _load_init_data(self):
+    def _set_necessary_data(self, type_apply: str):
         # Capacity history of each car model
-        load_path = os.path.join('..', 'input', 'capa')
-        capa_re = pd.read_csv(os.path.join(load_path, ''.join(['capa_re_', self.model_detail, '.csv'])), delimiter='\t',
-                              dtype={'date': str, 'model': str, 'capa': int})
-        capa_re_unavail = pd.read_csv(os.path.join(load_path, ''.join(['capa_unavail_', self.model_detail, '.csv'])),
-                                      delimiter='\t')
-
+        capa_re = self.utility.get_capacity(time='re', type_apply=type_apply)
+        capa_re_unavail = self.utility.get_capacity(time='re', type_apply=type_apply, unavail=True)
+        capa_re_unavail = capa_re_unavail.rename(columns={'capa': 'unavail'})
         capa_re = self._conv_mon_to_day(df=capa_re, end_day='28')
         capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_re_unavail)
 
@@ -117,9 +115,8 @@ class DiscRecommend(object):
                                                                          capa_re['capa'])}
 
         # Seasonality
-        load_path = os.path.join('..', 'input', 'seasonality')
-        season_hx = pd.read_csv(os.path.join(load_path, 'seasonality_hx.csv'))
-        season_re = pd.read_csv(os.path.join(load_path, 'seasonality_re.csv'), delimiter='\t')
+        season_hx = self.utility.get_season(time='hx')
+        season_re = self.utility.get_season(time='re')
         self.season = pd.concat([season_hx, season_re])
 
         # Demand change prediction of jeju visitors
@@ -150,14 +147,14 @@ class DiscRecommend(object):
 
     def _load_data(self, pred_day: str):
         load_path = os.path.join('..', 'result', 'data', 'prediction', self.apply_day)
-        detail_type = self.detail_type[self.model_detail]
+        detail_type = self.type_apply[self.type_apply]
         res_exp = {}
         for model in detail_type:
             res_exp[model] = pd.read_csv(os.path.join(load_path, model, 'res_pred(' + pred_day + ').csv'))
         self.res_pred = res_exp
 
         # Current reservation dataset
-        load_path = os.path.join('..', 'result', 'data', 'model_2', 're', self.model_detail)
+        load_path = os.path.join('..', 'result', 'data', 'model_2', self.res_update_day, self.type_apply)
         res_re = defaultdict(dict)
         for data_type in ['cnt_cum', 'util_cum']:
             for model in detail_type:
@@ -208,7 +205,7 @@ class DiscRecommend(object):
     def _add_feature(self, input_dict: dict, pred_day: str):
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
         for model, df in input_dict.items():
-            df['avail_capa'] = self.capa_re[(pred_datetime, self.model_type_map[model])] - df['curr_util_time']
+            df['avail_capa'] = self.capa_re[(pred_datetime, self.model_nm_map_rev[model])] - df['curr_util_time']
             df['applied_disc'] = self.disc_confirm[model][pred_datetime]
 
         return input_dict
@@ -275,7 +272,7 @@ class DiscRecommend(object):
         # Hyper-parameters (need to tune)
         theta_1 = 1     # Ratio of Decreasing magnitude
         if curr < exp:  # Ratio of increasing magnitude
-            theta1 = 0.7
+            theta_1 = 0.7
         theta_2 = 1     # Ratio of Demand magnitude
 
         # Suggestion curve bend
@@ -288,7 +285,7 @@ class DiscRecommend(object):
         return y
 
     @staticmethod
-    def _rec_disc_function_BAK(curr: float, exp: float, dmd: float):
+    def _rec_disc_function_bak(curr: float, exp: float, dmd: float):
         """
         Recommendation Objective function
         curr: Current Utilization Rate

@@ -33,12 +33,12 @@ class OfflineLearning(object):
             cost = 0.0
             for i in range(m):
                 rand_ind = np.random.randint(0, m)
-                X_i = x[rand_ind, :].reshape(1, x.shape[1])
+                x_i = x[rand_ind, :].reshape(1, x.shape[1])
                 y_i = y[rand_ind].reshape(1, 1)
-                prediction = np.dot(X_i, theta)
+                prediction = np.dot(x_i, theta)
 
-                theta = theta - (1 / m) * learning_rate * (X_i.T.dot((prediction - y_i)))
-                cost += self._cost_func(theta, X_i, y_i)
+                theta = theta - (1 / m) * learning_rate * (x_i.T.dot((prediction - y_i)))
+                cost += self._cost_func(theta, x_i, y_i)
             cost_history[it] = cost
 
     @staticmethod
@@ -83,7 +83,7 @@ class OfflineLearning(object):
 
         return y
 
-    def _gradient_descent_BAK(self, x, y, theta, learning_rate=0.01, iterations=100):
+    def _gradient_descent(self, x, y, theta, learning_rate=0.01, iterations=100):
         """
         :param x: Matrix of X with added bias units
         :param y: Vector of Y
@@ -104,7 +104,7 @@ class OfflineLearning(object):
 
         return theta, cost_history, theta_history
 
-    def _stochastic_gradient_descent_BAK(self, x, y, theta, learning_rate=0.01, iterations=100):
+    def _stochastic_gradient_descent_bak(self, x, y, theta, learning_rate=0.01, iterations=100):
         """
         :param x: X: Matrix of X with added bias units
         :param y: y: Vector of Y
@@ -120,10 +120,10 @@ class OfflineLearning(object):
             cost = 0.0
             for i in range(m):
                 rand_ind = np.random.randint(0, m)
-                X_i = x[rand_ind, :].reshape(1, x.shape[1])
+                x_i = x[rand_ind, :].reshape(1, x.shape[1])
                 y_i = y[rand_ind].reshape(1, 1)
-                prediction = np.dot(X_i, theta)
+                prediction = np.dot(x_i, theta)
 
-                theta = theta - (1 / m) * learning_rate * (X_i.T.dot((prediction - y_i)))
-                cost += self.calc_cost(theta, X_i, y_i)
+                theta = theta - (1 / m) * learning_rate * (x_i.T.dot((prediction - y_i)))
+                cost += self.calc_cost(theta, x_i, y_i)
             cost_history[it] = cost

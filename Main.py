@@ -21,12 +21,13 @@ from itertools import permutations
 warnings.filterwarnings('ignore')
 
 
-def data_preprocessing(res_status_ud_day: str, end_date: str):
-    data_prep = DataPrep(end_date=end_date)
+def data_preprocessing(res_status_ud_day: str, end_date: str, type_apply: str):
+    data_prep = DataPrep(end_date=end_date, res_status_ud_day=res_status_ud_day)
     # History dataset
-    data_prep.prep_res_hx()
+    # data_prep.prep_res_hx(type_apply=type_apply)
     # Recent  dataset
-    data_prep.prep_res_recent(res_status_ud_day=res_status_ud_day)
+    data_prep.prep_res_recent(res_status_ud_day=res_status_ud_day,
+                              type_apply=type_apply, time='re')
 
 
 # Model 1 : Jeju visitor prediction
@@ -55,28 +56,28 @@ def dmd_predict(start_date: str, end_date: str, n_test: int, pred_step: int):
 
 # Model 2
 def res_predict(start_date: str, end_date: str, apply_day: str,
-                res_status_ud_day: str, disc_confirm_last_week: str, model_detail: str):
+                res_status_ud_day: str, disc_confirm_last_week: str, type_apply: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
     model = ResPredict(res_status_ud_day=res_status_ud_day, apply_day=apply_day)
 
     # Train
-    # model.train(model_detail=model_detail)
+    # model.train(type_apply=type_apply)
 
     # Prediction
-    model.predict(pred_days=pred_days, disc_confirm_last_week=disc_confirm_last_week, model_detail=model_detail)
+    model.predict(pred_days=pred_days, disc_confirm_last_week=disc_confirm_last_week, type_apply=type_apply)
 
 
 # Model 3
 def disc_recommend(start_date: str, end_date: str, apply_day: str, res_update_day: str,
-                   disc_confirm_last_week: str, model_detail: str):
+                   disc_confirm_last_week: str, type_apply: str):
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
-    model = DiscRecommend(res_update_day=res_update_day, apply_day=apply_day, model_detail=model_detail,
+    model = DiscRecommend(res_status_ud_day=res_update_day, apply_day=apply_day, model_detail=type_apply,
                           disc_confirm_last_week=disc_confirm_last_week)
-    model.rec(pred_days=pred_days)
+    model.rec(pred_days=pred_days, type_apply=type_apply)
 
 
 def sales_predict(start_date: str, end_date: str, apply_day: str,
@@ -109,10 +110,11 @@ def weekly_report(start_date_weekly: str, end_date_weekly: str,
                              apply_last_week=apply_last_week,
                              apply_this_week=apply_this_week)
 
-    # post_proc.post_process()
+    # post_proc.post_process(type_apply='car')
     post_proc.calc_sales(res_confirm_day_from=res_confirm_day_from,
                          res_confirm_day_to=res_confirm_day_to,
-                         apply_last_week=apply_last_week)
+                         apply_last_week=apply_last_week,
+                         type_apply='car')
 
 ##########################################
 # Moin
@@ -133,14 +135,14 @@ def main():
     disc_confirm_last_week = '201204'   # Discount dataset on previous week (이전 확정 할인율)
 
     # Weekly Report hyper-paramter
-    start_date_weekly = '20201201'  # 보고서 산출 기간: 시작
-    end_date_weekly = '20210228'    # 보고서 산출 기간: 끝
-    apply_last_week = '201127'      # 지난주 할인율 산출 및 적용일
-    apply_this_week = '201204'      # 이번주 할인율 산출 및 적용일
-    res_status_last_week = '201126'     # 지난주 예약 현황 업데이트 날짜
+    start_date_weekly = '20201201'      # 보고서 산출 기간: 시작
+    end_date_weekly = '20210228'        # 보고서 산출 기간: 끝
+    apply_last_week = '201127'          # 지난주 할인율 산출 및 적용일
+    apply_this_week = '201204'          # 이번주 할인율 산출 및 적용일
+    res_status_last_week = '201126'     # 지난주 예약현황 업데이트 날짜
     res_status_this_week = '201204'     # 이번주 예약현황 업데이트 날짜
     res_status_cancel_this_week = '201203'  # 취소 데이터 업데이트 날짜
-    res_confirm_last_week = '201204'        # 지난주 예약 실적 업데이트 날짜
+    res_confirm_last_week = '201204'        # 지난주 예약실적 업데이트 날짜
     disc_rec_last_week = '20201201'         # 지난주 할인율 추천 날짜
     res_confirm_day_from = '201201'
     res_confirm_day_to = '201204'
@@ -152,15 +154,16 @@ def main():
     #             pred_step=31 + 28 + 31)
 
     # 2.Data Preprocessing
-    data_preprocessing(res_status_ud_day=res_status_ud_day,end_date=end_date)
+    # data_preprocessing(res_status_ud_day=res_status_ud_day, end_date=end_date,
+    #                    type_apply='car')
 
     # 3.Reservation Prediction
-    res_predict(start_date=start_date,
-                end_date=end_date,
-                apply_day=apply_day,
-                res_status_ud_day=res_status_ud_day,
-                disc_confirm_last_week=disc_confirm_last_week,
-                model_detail='car')
+    # res_predict(start_date=start_date,
+    #             end_date=end_date,
+    #             apply_day=apply_day,
+    #             res_status_ud_day=res_status_ud_day,
+    #             disc_confirm_last_week=disc_confirm_last_week,
+    #             type_apply='car')
 
     # 4.Discount Recommendation
     disc_recommend(start_date=start_date,
@@ -168,25 +171,25 @@ def main():
                    apply_day=apply_day,
                    res_update_day=res_status_ud_day,
                    disc_confirm_last_week=disc_confirm_last_week,
-                   model_detail='car')
+                   type_apply='car')
 
     # 5.Sales Prediction
-    sales_predict(start_date=start_date,
-                  end_date=end_date,
-                  apply_day=apply_day,
-                  res_status_ud_day=res_status_ud_day,
-                  disc_confirm_last_week=disc_confirm_last_week)
+    # sales_predict(start_date=start_date,
+    #               end_date=end_date,
+    #               apply_day=apply_day,
+    #               res_status_ud_day=res_status_ud_day,
+    #               disc_confirm_last_week=disc_confirm_last_week)
 
     # 6.Weekly Report
-    weekly_report(start_date_weekly=start_date_weekly, end_date_weekly=end_date_weekly,
-                  apply_last_week=apply_last_week, apply_this_week=apply_this_week,
-                  res_status_last_week=res_status_last_week, res_status_this_week=res_status_this_week,
-                  res_status_cancel_this_week=res_status_cancel_this_week,
-                  res_confirm_last_week=res_confirm_last_week,
-                  disc_confirm_last_week=disc_confirm_last_week,
-                  disc_rec_last_week=disc_rec_last_week,
-                  res_confirm_day_from=res_confirm_day_from,
-                  res_confirm_day_to=res_confirm_day_to)
+    # weekly_report(start_date_weekly=start_date_weekly, end_date_weekly=end_date_weekly,
+    #               apply_last_week=apply_last_week, apply_this_week=apply_this_week,
+    #               res_status_last_week=res_status_last_week, res_status_this_week=res_status_this_week,
+    #               res_status_cancel_this_week=res_status_cancel_this_week,
+    #               res_confirm_last_week=res_confirm_last_week,
+    #               disc_confirm_last_week=disc_confirm_last_week,
+    #               disc_rec_last_week=disc_rec_last_week,
+    #               res_confirm_day_from=res_confirm_day_from,
+    #               res_confirm_day_to=res_confirm_day_to)
 
 # Run main function
 main()
