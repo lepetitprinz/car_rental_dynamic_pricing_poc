@@ -3,7 +3,6 @@ from Utility import Utility
 import os
 import pickle
 import datetime as dt
-from datetime import timedelta
 from collections import defaultdict
 
 import numpy as np
@@ -19,7 +18,8 @@ class WeeklyReport(object):
 
     def __init__(self, res_status_last_week: str, res_status_this_week: str, res_status_cancel_this_week: str,
                  res_confirm_last_week: str, disc_confirm_last_week: str, disc_rec_last_week: str,
-                 start_day: str, end_day: str, apply_last_week: str, apply_this_week: str):
+                 disc_rec_2w_ago: str, disc_rec_3w_ago: str, start_day: str, end_day: str, apply_last_week: str,
+                 apply_this_week: str, res_confirm_day_from: str, res_confirm_day_to: str, res_confirm_bf: str):
         self.utility = Utility
         # Path
         self.path_hx_data = os.path.join('..', 'result', 'data', 'model_2', 'hx', 'car')
@@ -32,18 +32,23 @@ class WeeklyReport(object):
         self.res_confirm_last_week = res_confirm_last_week
         self.disc_confirm_last_week = disc_confirm_last_week
         self.disc_rec_last_week = disc_rec_last_week
+        self.disc_rec_2w_ago = disc_rec_2w_ago
+        self.disc_rec_3w_ago = disc_rec_3w_ago
         self.apply_this_week = apply_this_week
         self.apply_last_week = apply_last_week
         self.start_day = start_day
         self.end_day = end_day
+        self.res_confirm_day_from = res_confirm_day_from
+        self.res_confirm_day_to = res_confirm_day_to
+        self.res_confirm_bf = res_confirm_bf
 
         # Data
         self.res_re: pd.DataFrame = pd.DataFrame()
         self.cancel_re: pd.DataFrame = pd.DataFrame()
         self.capa_re: dict = {}
-        self.disc_confirm: dict = {}
-        self.disc_rec: dict = {}
         self.season_re: dict = {}
+        self.disc_rec: dict = {}
+        self.disc_confirm: dict = {}
 
         # data type
         self.type_data: list = self.utility.TYPE_DATA
@@ -64,22 +69,26 @@ class WeeklyReport(object):
                                    'vlst': 'VELOSTER', 'soul': 'SOUL'}
         self.model_grp = {'av_ad': 'av', 'av_new': 'av', 'k3': 'k3', 'soul': 'su', 'vlst': 'vl'}
         self.status_cancel = ['취소', 'no show']
-        self.drop_col_res = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm',
-                             'res_model', 'car_grd', 'rent_period_day', 'rent_period_time', 'cdw_fee',
-                             'discount_type', 'discount_type_nm', 'sale_purpose', 'applied_discount', 'discount_rate',
-                             'member_grd', 'sale_purpose', 'car_kind', 'res_model_nm']
+        self.drop_col_res = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm', 'car_grd', 'rent_period_day',
+                             'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm', 'sale_purpose',
+                             'applied_discount', 'discount_rate', 'member_grd', 'sale_purpose', 'car_kind',
+                             'res_model_nm']
         self.drop_col_cancel = ['return_datetime', 'res_channel', 'customer_number', 'tot_fee',
                                 'res_model_nm', 'status']
 
-    def post_process(self, type_apply: str):
+    def post_process(self, type_apply: str, time='re'):
         # Load dataset
-        res_last_week, res_this_week, res_cancel_this_week, res_confirmed = self._load_data()
+        res_last_week, res_this_week, res_cancel_this_week, res_confirmed, res_confirmed_bf = self._load_data(time=time)
 
-        #
-        self._load_fee_hx()
+        # Load rental/cdw fee of history dataset
+        self.rent_fee_hx, self.rent_cdw_hx = self._load_fee_hx()
+        # Load recent capacity of each model
         self.capa_re = self._get_capacity(time='re', type_apply=type_apply)
+        # Load recent seasonal setting
         self.season_re = self._get_season(time='re')
+        # Load recommend discount on last week
         self.disc_rec = self._get_disc_rec()
+        # Load confirmed discount on last week
         self.disc_confirm = self._get_disc_confirm_last_week()
 
         # Change data type
@@ -92,28 +101,30 @@ class WeeklyReport(object):
         res_cancel_this_week['rent_day'] = res_cancel_this_week['rent_datetime'].dt.strftime('%Y%m%d')
         res_cancel_this_week['rent_day'] = pd.to_datetime(res_cancel_this_week['rent_day'], format='%Y%m%d')
 
+        res_confirmed['rent_day'] = pd.to_datetime(res_confirmed['rent_day'], format='%Y-%m-%d')
+        res_confirmed_bf['rent_day'] = pd.to_datetime(res_confirmed_bf['rent_day'], format='%Y-%m-%d')
+
         # Filter datetime
-        last_week_dt = dt.datetime.strptime(self.res_status_last_week, '%y%m%d')
-        start_day_dt = dt.datetime.strptime(self.start_day, '%Y%m%d')
-        end_day_dt = dt.datetime.strptime(self.end_day, '%Y%m%d')
-        apply_last_dt = dt.datetime.strptime(self.apply_last_week, '%y%m%d')
-        apply_this_dt = dt.datetime.strptime(self.apply_this_week, '%y%m%d')
-        res_last_week = res_last_week[(res_last_week['rent_day'] >= last_week_dt) &
-                                      (res_last_week['rent_day'] <= end_day_dt)]
-        res_this_week = res_this_week[(res_this_week['rent_day'] >= last_week_dt) &
-                                      (res_this_week['rent_day'] <= end_day_dt)]
-        res_cancel_this_week = res_cancel_this_week[(res_cancel_this_week['cancel_datetime'] >= apply_last_dt) &
-                                                    (res_cancel_this_week['cancel_datetime'] < apply_this_dt)]
+        res_last_week, res_this_week, res_cancel_this_week = self._filter_date_res(last_week=res_last_week,
+                                                                                   this_week=res_this_week,
+                                                                                   cc_this_week=res_cancel_this_week)
+        res_confirmed, res_confirmed_bf = self._filter_date_res_confirm(res_confirmed=res_confirmed,
+                                                                        res_confirmed_bf=res_confirmed_bf)
+
+        # merge
+        res_last_week = pd.concat([res_confirmed_bf, res_last_week], axis=0)
+        res_this_week = pd.concat([res_confirmed, res_this_week], axis=0)
 
         # Filter 1.6 grade cars
-        res_last_week = res_last_week[res_last_week['res_model_nm'].isin(self.grade_1_6)]
-        res_this_week = res_this_week[res_this_week['res_model_nm'].isin(self.grade_1_6)]
-        res_cancel_this_week = res_cancel_this_week[res_cancel_this_week['res_model_nm'].isin(self.grade_1_6)]
+        res_last_week = self.utility.filter_model_grade(df=res_last_week)
+        res_this_week = self.utility.filter_model_grade(df=res_this_week)
+        res_cancel_this_week = self.utility.filter_model_grade(df=res_cancel_this_week)
 
         # Filter canceled data
         res_cancel_this_week = res_cancel_this_week[res_cancel_this_week['status'].isin(self.status_cancel)]
 
         # Group
+        res_last_week = self.utility.cluster_model(df=res_last_week, type_apply=type_apply)
         res_this_week = self.utility.cluster_model(df=res_this_week, type_apply=type_apply)
         res_cancel_this_week = self.utility.cluster_model(df=res_cancel_this_week, type_apply=type_apply)
 
@@ -127,13 +138,9 @@ class WeeklyReport(object):
         res_this_week = res_this_week.drop_duplicates(subset=['res_num'])
 
         # Reservation count
-        cnt_last_week = res_last_week.groupby(by=['model', 'rent_day']).count()['res_num']
-        cnt_this_week = res_this_week.groupby(by=['model', 'rent_day']).count()['res_num']
-        cnt_cancel_this_week = res_cancel_this_week.groupby(by=['rent_day', 'model']).count()['res_num']
-        cnt_last_week = cnt_last_week.reset_index(level=(0, 1))
-        cnt_this_week = cnt_this_week.reset_index(level=(0, 1))
-        cnt_cancel_this_week = cnt_cancel_this_week.reset_index(level=(0, 1))
-        cnt_cancel_this_week = cnt_cancel_this_week.rename(columns={'res_num': 'canceled'})
+        cnt_last_week, cnt_this_week, cnt_cancel_this_week = self._group_res_cnt(last_week=res_last_week,
+                                                                                 this_week=res_this_week,
+                                                                                 cancel_this_week=res_cancel_this_week)
 
         # Change to utilization rate
         util_last_week = self.utility.get_res_util(df=res_last_week)
@@ -193,6 +200,8 @@ class WeeklyReport(object):
                           left_index=True, right_index=False)
 
         # Filter days
+        start_day_dt = dt.datetime.strptime(self.start_day, '%Y%m%d')
+        end_day_dt = dt.datetime.strptime(self.end_day, '%Y%m%d')
         result = result[(result['rent_day'] >= start_day_dt) & (result['rent_day'] <= end_day_dt)]
 
         # Fill NA
@@ -248,9 +257,9 @@ class WeeklyReport(object):
             temp = pd.merge(date_df, temp, how='left', on=['rent_day', 'season'], left_index=True, right_index=False)
             temp = temp.fillna(0)
 
-            disc_confirm_model = self.disc_confirm[self.model_type_map_grp[model]]
+            disc_confirm_model = self.disc_confirm[model]
             temp['disc_applied'] = [disc_confirm_model[rent_day] for rent_day in temp['rent_day']]
-            temp['disc_rec'] = [self.disc_rec[self.model_grp[model]][rent_day][3] for rent_day in temp['rent_day']]
+            temp['disc_rec'] = [self.disc_rec[model][rent_day][3] for rent_day in temp['rent_day']]
 
             temp['cnt_chg'] = temp['cnt_this_week'] - temp['cnt_last_week']
             temp['disc_diff'] = temp['disc_applied'] - temp['disc_rec']
@@ -297,13 +306,26 @@ class WeeklyReport(object):
 
         print("")
 
+    @staticmethod
+    def _group_res_cnt(last_week: pd.DataFrame, this_week: pd.DataFrame,
+                       cancel_this_week: pd.DataFrame):
+        cnt_last_week = last_week.groupby(by=['res_model', 'rent_day']).count()['res_num']
+        cnt_this_week = this_week.groupby(by=['res_model', 'rent_day']).count()['res_num']
+        cnt_cancel_this_week = cancel_this_week.groupby(by=['rent_day', 'res_model']).count()['res_num']
+        cnt_last_week = cnt_last_week.reset_index(level=(0, 1))
+        cnt_this_week = cnt_this_week.reset_index(level=(0, 1))
+        cnt_cancel_this_week = cnt_cancel_this_week.reset_index(level=(0, 1))
+        cnt_cancel_this_week = cnt_cancel_this_week.rename(columns={'res_num': 'canceled'})
+
+        return cnt_last_week, cnt_this_week, cnt_cancel_this_week
+
     def calc_sales(self, res_confirm_day_from: str, res_confirm_day_to: str, apply_last_week: str,
                    type_apply: str):
         res_confirm_day_from_dt = dt.datetime.strptime(res_confirm_day_from, '%y%m%d')
         res_confirm_day_to_dt = dt.datetime.strptime(res_confirm_day_to, '%y%m%d')
 
         # Load dataset
-        res_last_week, res_this_week, res_cancel, res_confirmed = self._load_data(time='re')
+        res_last_week, res_this_week, cancel_this_week, res_confirmed, res_confirmed_bf = self._load_data(time='re')
 
         # Change data type
         res_confirmed['rent_day'] = pd.to_datetime(res_confirmed['rent_day'], format='%Y-%m-%d')
@@ -319,22 +341,13 @@ class WeeklyReport(object):
         res_confirmed = res_confirmed.drop(columns=self.drop_col_res, errors='ignore')
 
         # Filter datetime
-        apply_last_week_dt = dt.datetime.strptime(apply_last_week, '%y%m%d')
-        last_week_dt = dt.datetime.strptime(self.res_status_last_week, '%y%m%d')
-        end_day_dt = dt.datetime.strptime(self.end_day, '%Y%m%d')
-        res_confirmed = res_confirmed[(res_confirmed['rent_day'] >= last_week_dt) &
-                                      (res_confirmed['rent_day'] <= end_day_dt)]
-        res_confirmed_last_week = res_confirmed[res_confirmed['res_day'] < apply_last_week_dt]
-
-        # res_last_week = res_last_week.drop(columns=self.drop_col_res, errors='ignore')
-        # res_last_week_new = pd.merge(res_last_week, res_cancel[['res_num', 'status']], how='left', on=['res_num'],
-        #                              left_index=True, right_index=False)
-        # res_last_week_new = res_last_week_new.fillna('reserve')
-        # res_last_week_new = res_last_week_new[res_last_week_new['status'] == 'reserve']
-
+        apply_last_week_dt = dt.datetime.strptime('201127', '%y%m%d')
+        res_confirmed = res_confirmed[(res_confirmed['rent_day'] >= res_confirm_day_from_dt) &
+                                      (res_confirmed['rent_day'] <= res_confirm_day_to_dt)]
         tot_sales = res_confirmed.groupby(by=['res_model', 'rent_day']).sum()['tot_fee']
         tot_sales = tot_sales.reset_index(level=(0, 1))
 
+        res_confirmed_last_week = res_confirmed[res_confirmed['res_day'] <= apply_last_week_dt]
         tot_sales_last_week = res_confirmed_last_week.groupby(by=['res_model', 'rent_day']).sum()['tot_fee']
         tot_sales_last_week = tot_sales_last_week.reset_index(level=(0, 1))
 
@@ -355,6 +368,34 @@ class WeeklyReport(object):
         sales.T.to_csv(os.path.join(save_path, 'weekly_report_sales_confirmed.csv'), header=False)
 
         # Calculate Expect
+
+    def _filter_date_res(self, last_week: pd.DataFrame, this_week: pd.DataFrame,
+                         cc_this_week: pd.DataFrame):
+        rest_confirm_day_from_dt = dt.datetime.strptime(self.res_confirm_day_from, '%y%m%d')
+        rest_confirm_day_to_dt = dt.datetime.strptime(self.res_confirm_day_to, '%y%m%d')
+        end_day_dt = dt.datetime.strptime(self.end_day, '%Y%m%d')
+        apply_last_dt = dt.datetime.strptime(self.apply_last_week, '%y%m%d')
+        apply_this_dt = dt.datetime.strptime(self.apply_this_week, '%y%m%d')
+        last_week = last_week[(last_week['rent_day'] > rest_confirm_day_to_dt) &
+                              (last_week['rent_day'] <= end_day_dt)]
+        this_week = this_week[(this_week['rent_day'] > rest_confirm_day_to_dt) &
+                              (this_week['rent_day'] <= end_day_dt)]
+        cc_this_week = cc_this_week[(cc_this_week['cancel_datetime'] >= apply_last_dt) &
+                                    (cc_this_week['cancel_datetime'] < apply_this_dt)]
+
+        return last_week, this_week, cc_this_week
+
+    def _filter_date_res_confirm(self, res_confirmed: pd.DataFrame, res_confirmed_bf: pd.DataFrame):
+        rest_confirm_day_from_dt = dt.datetime.strptime(self.res_confirm_day_from, '%y%m%d')
+        rest_confirm_day_to_dt = dt.datetime.strptime(self.res_confirm_day_to, '%y%m%d')
+        res_confirmed = res_confirmed[res_confirmed['rent_day'] <= rest_confirm_day_to_dt]
+        # res_confirmed = res_confirmed[(res_confirmed['rent_day'] >= rest_confirm_day_from_dt) &
+        #                               (res_confirmed['rent_day'] <= rest_confirm_day_to_dt)]
+        res_confirmed_bf = res_confirmed_bf[res_confirmed_bf['rent_day'] <= rest_confirm_day_to_dt]
+        # res_confirmed_bf = res_confirmed_bf[(res_confirmed_bf['rent_day'] >= rest_confirm_day_from_dt) &
+        #                               (res_confirmed_bf['rent_day'] <= rest_confirm_day_to_dt)]
+
+        return res_confirmed, res_confirmed_bf
 
     def _set_capa(self, x):
         return self.capa_re[(x[0], x[1])]
@@ -421,7 +462,7 @@ class WeeklyReport(object):
             model_bests = {}
             for model in self.type_model:   # av_ad / av_new / k3 / soul / vlst
                 f = open(os.path.join(self.path_model, model_detail, data_type,
-                                      regr + '_params_' + self.model_grp[model] + '.pickle'), 'rb')
+                                      regr + '_params_' + model + '.pickle'), 'rb')
                 model_bests[model] = pickle.load(f)
                 f.close()
             regr_bests[data_type] = model_bests
@@ -444,17 +485,19 @@ class WeeklyReport(object):
 
     def _load_data(self, time: str):
         # Load recent reservation dataset
-        res_last_week = self.utility.get_res(time=time, status_update_day=self.res_status_last_week)
-        res_this_week = self.utility.get_res(time=time, status_update_day=self.res_status_this_week)
+        res_last_week = self.utility.load_res(time=time, status_update_day=self.res_status_last_week)
+        res_this_week = self.utility.load_res(time=time, status_update_day=self.res_status_this_week)
         data_path = os.path.join('..', 'input', 'res_confirm')
         res_confirmed = pd.read_csv(os.path.join(data_path, 'res_confirm_' + self.res_confirm_last_week + '.csv'),
                                     delimiter='\t')
+        res_confirmed_bf = pd.read_csv(os.path.join('..', 'input', 'res_status',
+                                                    'res_status_' + self.res_confirm_bf + '.csv'), delimiter='\t')
 
         # Rename columns
-        res_remap_cols = self.utility.RENAME_COL_RES
-        res_last_week = res_last_week.rename(columns=res_remap_cols)
-        res_this_week = res_this_week.rename(columns=res_remap_cols)
-        res_confirmed = res_confirmed.rename(columns=res_remap_cols)
+        res_last_week = res_last_week.rename(columns=self.utility.RENAME_COL_RES)
+        res_this_week = res_this_week.rename(columns=self.utility.RENAME_COL_RES)
+        res_confirmed = res_confirmed.rename(columns=self.utility.RENAME_COL_RES)
+        res_confirmed_bf = res_confirmed_bf.rename(columns=self.utility.RENAME_COL_RES)
 
         # Data Preprocessing
         res_confirmed['res_route'] = 0    # Exception
@@ -473,16 +516,14 @@ class WeeklyReport(object):
             '고객번호': 'customer_number', '총청구액': 'tot_fee', '최종수정일시': 'cancel_datetime'}
         cancel_this_week = cancel_this_week.rename(columns=cancel_remap_cols)
 
-        return res_last_week, res_this_week, cancel_this_week, res_confirmed
+        return res_last_week, res_this_week, cancel_this_week, res_confirmed, res_confirmed_bf
 
     def _get_capacity(self, time: str, type_apply: str):
         # Initial capacity of each model
-        capacity = self.utility.get_capacity(time=time, type_apply=type_apply)
-        capa_re = {(date, self.model_nm_map[model]): capa for date, model, capa in zip(capacity['date'],
-                                                                                       capacity['model'],
-                                                                                       capacity['capa'])}
+        capacity = self.utility.load_capacity(time=time, type_apply=type_apply)
+        capa_map = self.utility.make_capa_map(df=capacity)
 
-        return capa_re
+        return capa_map
 
     def _get_disc_confirm_last_week(self):
         # Initial capacity of each model
@@ -492,28 +533,56 @@ class WeeklyReport(object):
         disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
         disc_comfirm_dict = defaultdict(dict)
         for date, model, disc in zip(disc_comfirm['date'], disc_comfirm['model'], disc_comfirm['disc']):
-            disc_comfirm_dict[model].update({date: disc})
+            disc_comfirm_dict[self.model_nm_map[model]].update({date: disc})
 
         return disc_comfirm_dict
 
     def _get_disc_rec(self):
-        disc_rec = {}
-        load_path = os.path.join('..', 'result', 'data', 'recommend', 'summary', self.disc_rec_last_week, 'original')
-        for model_grp in ['av', 'k3', 'su', 'vl']:
-            df = pd.read_csv(os.path.join(load_path, 'rec_summary_' + model_grp + '.csv'), encoding='euc-kr')
-            df = df[['대여일', '기대 예약건수', '기대 가동대수(시간)', '기대가동률', '추천 할인율']]
-            df = df.rename(columns={'대여일': 'rent_day', '기대 예약건수': 'exp_cnt', '기대 가동대수(시간)': 'exp_util',
-                                    '기대가동률': 'exp_util_rate', '추천 할인율': 'disc_rec'})
-            df['rent_day'] = pd.to_datetime(df['rent_day'], format='%Y-%m-%d')
-            disc_rec[model_grp] = {date: [cnt, util, util_rate, disc] for date, cnt,
-                                   util, util_rate, disc in zip(df['rent_day'], df['exp_cnt'], df['exp_util'],
-                                                                df['exp_util_rate'], df['disc_rec'])}
+        load_path_last_week = os.path.join('..', 'result', 'data', 'recommend', 'summary',
+                                           self.disc_rec_last_week, 'original')
+        load_path_2w_ago = os.path.join('..', 'result', 'data', 'recommend', 'summary',
+                                        self.disc_rec_2w_ago, 'original')
+        load_path_3w_ago = os.path.join('..', 'result', 'data', 'recommend', 'summary',
+                                        self.disc_rec_3w_ago, 'original')
 
-        return disc_rec
+        filter_cols = ['대여일', '기대 예약건수', '기대 가동대수(시간)', '기대가동률', '추천 할인율']
+        rename_cols = {'대여일': 'rent_day', '기대 예약건수': 'exp_cnt', '기대 가동대수(시간)': 'exp_util',
+                       '기대가동률': 'exp_util_rate', '추천 할인율': 'disc_rec'}
+        rec_last_week = {}
+        for model_grp in self.type_model:
+            disc_rec_last_week = dt.datetime.strptime(self.disc_rec_last_week, '%Y%m%d')
+            disc_rec_2w_ago = dt.datetime.strptime(self.disc_rec_2w_ago, '%Y%m%d')
+
+            lt_week = pd.read_csv(os.path.join(load_path_last_week, 'rec_summary_' + model_grp + '.csv'),
+                                  encoding='euc-kr')
+            lt_week = lt_week[filter_cols]
+            lt_week = lt_week.rename(columns=rename_cols)
+            lt_week['rent_day'] = pd.to_datetime(lt_week['rent_day'], format='%Y-%m-%d')
+
+            week_2_ago = pd.read_csv(os.path.join(load_path_2w_ago, 'rec_summary_' + model_grp + '.csv'),
+                                       encoding='euc-kr')
+            week_2_ago = week_2_ago[filter_cols]
+            week_2_ago = week_2_ago.rename(columns=rename_cols)
+            week_2_ago['rent_day'] = pd.to_datetime(week_2_ago['rent_day'], format='%Y-%m-%d')
+            week_2_ago = week_2_ago[week_2_ago['rent_day'] < disc_rec_last_week]
+
+            week_3_ago = pd.read_csv(os.path.join(load_path_3w_ago, 'rec_summary_' + model_grp + '.csv'),
+                                       encoding='euc-kr')
+            week_3_ago = week_3_ago[filter_cols]
+            week_3_ago = week_3_ago.rename(columns=rename_cols)
+            week_3_ago['rent_day'] = pd.to_datetime(week_3_ago['rent_day'], format='%Y-%m-%d')
+            week_3_ago = week_3_ago[week_3_ago['rent_day'] < disc_rec_2w_ago]
+
+            lt_week = pd.concat([week_3_ago, week_2_ago, lt_week], axis=0)
+
+            rec_last_week[model_grp] = {date: [cnt, util, util_rate, disc] for date, cnt,
+                                                                               util, util_rate, disc in zip(lt_week['rent_day'], lt_week['exp_cnt'],
+                                                                                                            lt_week['exp_util'], lt_week['exp_util_rate'], lt_week['disc_rec'])}
+        return rec_last_week
 
     def _get_season(self, time: str):
         # Load recent seasonality dataset
-        season_re = self.utility.get_season(time=time)
+        season_re = self.utility.load_season(time=time)
         season_map = {day: season for day, season in zip(season_re['rent_day'], season_re['seasonality'])}
 
         return season_map
@@ -522,13 +591,9 @@ class WeeklyReport(object):
         sales_per_res = pd.read_csv(os.path.join(self.path_sales_per_res, 'sales_per_res.csv'), encoding='euc-kr')
         rent_fee = defaultdict(dict)
         rent_cdw = defaultdict(dict)
-        sales_per_res['res_model'] = sales_per_res['res_model'].apply(lambda x: self.model_nm_map[x])
-        for season, model, fee, cdw in zip(sales_per_res['seasonality'],
-                                           sales_per_res['res_model'],
-                                           sales_per_res['rent_fee_org'],
-                                           sales_per_res['cdw_fee']):
+        for season, model, fee, cdw in zip(sales_per_res['seasonality'], sales_per_res['res_model'],
+                                           sales_per_res['rent_fee_org'], sales_per_res['cdw_fee']):
             rent_fee[season].update({model: int(fee)})
             rent_cdw[season].update({model: int(cdw)})
 
-        self.rent_fee_hx = rent_fee
-        self.rent_cdw_hx = rent_cdw
+        return rent_fee, rent_cdw

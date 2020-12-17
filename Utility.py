@@ -1,4 +1,6 @@
 import os
+import datetime as dt
+from calendar import monthrange
 from datetime import timedelta
 
 import numpy as np
@@ -8,6 +10,12 @@ import pandas as pd
 class Utility(object):
     # Path
     PATH_INPUT = os.path.join('..', 'input')
+    PATH_MODEL = os.path.join('..', 'result', 'model')
+
+    # Initial Setting
+    TEST_SIZE = 0.2
+    RANDOM_STATE = 2020
+    AVG_UNAVAIL_CAPA = 2    # Average unavailable capacity
 
     # Data
     TYPE_GROUP: list = ['av', 'k3', 'su', 'vl']
@@ -30,14 +38,14 @@ class Utility(object):
             '대여일': 'rent_day', '대여시간': 'rent_time', '반납일': 'return_day', '반납시간': 'return_time',
             '대여기간(일)': 'rent_period_day', '대여기간(시간)': 'rent_period_time',
             'CDW요금': 'cdw_fee', '할인유형': 'discount_type', '할인유형명': 'discount_type_nm',
-            '적용할인명': 'applyed_discount', '적용할인율(%)': 'discount', '회원등급': 'member_grd',
+            '적용할인명': 'applied_discount', '적용할인율(%)': 'discount', '회원등급': 'member_grd',
             '구매목적': 'sale_purpose', '생성일': 'res_day', '차종': 'car_kind'}
 
-    ################
+    #####################
     # Load datasets
-    ################
+    #####################
     @staticmethod
-    def get_res(time: str, status_update_day=''):
+    def load_res(time: str, status_update_day=''):
         """
         :param time: hx / re (history or recent)
         :param status_update_day: Update day of reservation status
@@ -63,7 +71,7 @@ class Utility(object):
         return res
 
     @staticmethod
-    def get_season(time: str):
+    def load_season(time: str):
         """
         :param time: hx / re (history or recent)
         :return:
@@ -77,7 +85,7 @@ class Utility(object):
         return season
 
     @staticmethod
-    def get_capacity(time: str, type_apply: str, unavail=False):
+    def load_capacity(time: str, type_apply: str, unavail=False):
         """
         :param time: hx / re (history or Recent)
         :param type_apply: model / car
@@ -92,6 +100,9 @@ class Utility(object):
 
         return capacity
 
+    #####################
+    # Cluster car models
+    #####################
     @staticmethod
     def cluster_model(df: pd.DataFrame, type_apply: str):
         if type_apply == 'car':
@@ -101,8 +112,7 @@ class Utility(object):
                 df['res_model_nm'] == 'ALL NEW K3 (G)',
                 df['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)']),
                 df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
-            values = ['av_ad', 'av_new', 'k3', 'soul', 'vlst']
-
+            values = Utility.TYPE_MODEL
             df['res_model'] = np.select(conditions, values)
 
         elif type_apply == 'model':
@@ -117,11 +127,54 @@ class Utility(object):
                 df['res_model_nm'].isin(vl),
                 df['res_model_nm'].isin(su)]
             values = ['AVANTE', 'K3', 'VELOSTER', 'SOUL']
-
             df['res_model'] = np.select(conditions, values)
 
         return df
 
+    @staticmethod
+    def filter_model_grade(df: pd.DataFrame):
+        df = df[df['res_model_nm'].isin(Utility.GRADE_1_6)]
+        df = df.reset_index(drop=True)
+
+        return df
+
+    #######################
+    # Methods of Capacity
+    #######################
+    @staticmethod
+    def conv_mon_to_day(df: pd.DataFrame):
+        months = np.sort(df['date'].unique())
+        months.sort()
+        fst_month = dt.datetime.strptime(months[0], '%Y%m')
+        last_month = dt.datetime.strptime(months[-1], '%Y%m')
+        last_day = last_month.replace(day=monthrange(last_month.year, last_month.month)[1])
+        days = pd.date_range(start=fst_month, end=last_day)
+        model_unique = df[['model', 'capa']].drop_duplicates()
+
+        df_days = pd.DataFrame()
+        for model, capa in zip(model_unique['model'], model_unique['capa']):
+            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
+            df_days = pd.concat([df_days, temp], axis=0)
+
+        return df_days
+
+    @staticmethod
+    def apply_unavail_capa(capacity: pd.DataFrame, capa_unavail: pd.DataFrame):
+        capa_unavail['date'] = pd.to_datetime(capa_unavail['date'], format='%Y%m%d')
+        capa_new = pd.merge(capacity, capa_unavail, how='left', on=['date', 'model'],
+                            left_index=True, right_index=False)
+        capa_new = capa_new.fillna(0)
+        capa_new['capa'] = capa_new['capa'] - capa_new['unavail']
+
+        return capa_new
+
+    @staticmethod
+    def make_capa_map(df: pd.DataFrame):
+        return {(date, Utility.MODEL_NAME_MAP[model]): capa for date, model, capa in zip(df['date'],
+                                                                                         df['model'],
+                                                                                         df['capa'])}
+
+    # Lead time
     @staticmethod
     def get_lead_time():
         # Lead Time Setting
@@ -202,7 +255,7 @@ class Utility(object):
 
             res_util.extend(np.array([
                 date_range, [res_day] * date_len, util, [discount] * date_len, [model] * date_len]).T)
-        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util_rate', 'discount', 'res_model'])
+        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util', 'discount', 'res_model'])
 
         return res_util_df
 

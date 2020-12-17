@@ -40,14 +40,12 @@ class SalesPredict(object):
 
         # Data & model types
         self.type_data = ['cnt_inc', 'cnt_cum', 'util_inc', 'util_cum', 'disc']
-
-        self.grade_1_6 = self.utility.GRADE_1_6
         self.type_model = self.utility.TYPE_MODEL
         self.model_nm_map = self.utility.MODEL_NAME_MAP
 
         # Initial Setting
-        self.random_state = 2020  # Data split randomness
-        self.test_size = 0.2  # Test dataset size
+        self.random_state = self.utility.RANDOM_STATE  # Data split randomness
+        self.test_size = self.utility.TEST_SIZE # Test dataset size
 
         # Dataset
         self.res_data_hx: dict = {}
@@ -73,23 +71,19 @@ class SalesPredict(object):
         self.lt_vec: np.array = []
         self.lt_to_lt_vec: dict = {}
 
-    def data_preprocessing(self):
+    def data_preprocessing(self, type_apply: str):
         # Load reservation history dataset
-        res_hx = self._load_data_hx()
-
+        res_hx = self.utility.load_res(time='hx')
         # Filter 1.6 grade models
-        res_hx = res_hx[res_hx['res_model_nm'].isin(self.grade_1_6)]
-        res_hx = res_hx.reset_index(drop=True)
-
-        res_hx = self._cluster_by_group(df=res_hx)
-
+        res_hx = self.utility.filter_model_grade(df=res_hx)
+        # Cluster car models
+        res_hx = self.utility.cluster_model(df=res_hx, type_apply=type_apply)
         # Calculate expected reservation periods
         res_hx = self._calc_exp_res_period(df=res_hx)
 
         # Filter date
         res_hx = res_hx[res_hx['rent_datetime'] >= dt.datetime(2018, 1, 1)]
         res_hx = res_hx.reset_index(drop=True)
-
         res_hx = res_hx.rename(columns={'car_rent_fee': 'rent_fee'})
 
         # Calculate original fee
@@ -177,28 +171,6 @@ class SalesPredict(object):
     #################################
     # Methods for Data Preprocessing
     #################################
-    # Load reservation history
-    def _load_data_hx(self):
-        res_hx = pd.read_csv(os.path.join(self.path_input, 'res_status', 'res_hx.csv'),
-                             dtype={'res_num': str, 'res_route_nm': str, 'res_model_nm': str, 'rent_day': str,
-                                    'rent_time': str, 'return_day': str, 'return_time': str, 'car_rent_fee': int,
-                                    'cdw_fee': int, 'tot_fee': int, 'discount': float, 'res_day': str,
-                                    'seasonality': int})
-
-        return res_hx
-
-    def _cluster_by_group(self, df: pd.DataFrame):
-        conditions = [
-            df['res_model_nm'].isin(['아반떼 AD (G)', '아반떼 AD (G) F/L']),
-            df['res_model_nm'] == '올 뉴 아반떼 (G)',
-            df['res_model_nm'] == 'ALL NEW K3 (G)',
-            df['res_model_nm'].isin(['쏘울 (G)', '쏘울 부스터 (G)']),
-            df['res_model_nm'] == '더 올 뉴 벨로스터 (G)']
-        values = self.type_model
-        df['res_model'] = np.select(conditions, values)
-
-        return df
-
     @staticmethod
     def _calc_exp_res_period(df: pd.DataFrame):
         # Change data types
@@ -389,7 +361,7 @@ class SalesPredict(object):
         capa_unavail = pd.read_csv(os.path.join(load_path, ''.join(['capa_unavail_', model_detail, '.csv'])),
                                    delimiter='\t')
 
-        capa_re = self._conv_mon_to_day(df=capa_re, end_day='31')
+        capa_re = self.utility.conv_mon_to_day(df=capa_re)
         capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_unavail)
 
         capa_re_dict = defaultdict(dict)
@@ -407,28 +379,6 @@ class SalesPredict(object):
 
         return capa_new
 
-    @staticmethod
-    def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
-        months = np.sort(df['date'].unique())
-        days = pd.date_range(start=''.join([months[0], '01']), end=''.join([months[-1], end_day]))
-        model_unique = df[['model', 'capa']].drop_duplicates()
-
-        df_days = pd.DataFrame()
-        for model, capa in zip(model_unique['model'], model_unique['capa']):
-            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
-            df_days = pd.concat([df_days, temp], axis=0)
-
-        return df_days
-
-    @staticmethod
-    def _get_lead_time():
-        # Lead Time Setting
-        lt = np.arange(-89, 1, 1)
-        lt_vec = np.arange(-36, 1, 1)
-        lt_to_lt_vec = {-1 * i: (((i // 7) + 24) * -1 if i > 28 else i * -1) for i in range(0, 90, 1)}
-
-        return lt, lt_vec, lt_to_lt_vec
-
     def _get_res_status(self):
         # Load recent reservation dataset
         load_path = os.path.join('..', 'input', 'res_status')
@@ -439,7 +389,7 @@ class SalesPredict(object):
         res_re = res_re.rename(columns=self.utility.RENAME_COL_RES)
 
         # filter only 1.6 grade car group
-        res_re = res_re[res_re['res_model_nm'].isin(self.grade_1_6)]
+        res_re = self.utility.filter_model_grade(df=res_re)
 
         # Group Car Model
         res_re = self._cluster_by_group(df=res_re)
@@ -451,13 +401,13 @@ class SalesPredict(object):
         res_re['rent_day'] = pd.to_datetime(res_re['rent_day'], format='%Y-%m-%d')
         res_re['res_day'] = pd.to_datetime(res_re['res_day'], format='%Y-%m-%d')
 
-        res_util = self._get_res_util(df=res_re)
+        res_util = self.utility.get_res_util(df=res_re)
 
         # Drop columns 2
         res_drop_col = ['res_route', 'res_route_nm', 'cust_kind', 'cust_kind_nm',
                         'car_grd', 'rent_time', 'return_day', 'return_time', 'rent_period_day',
                         'rent_period_time', 'cdw_fee', 'discount_type', 'discount_type_nm', 'sale_purpose',
-                        'applyed_discount', 'discount_rate', 'member_grd', 'sale_purpose', 'car_kind']
+                        'applied_discount', 'discount_rate', 'member_grd', 'sale_purpose', 'car_kind']
         res_re = res_re.drop(columns=res_drop_col, errors='ignore')
 
         # Filter datetime
@@ -494,9 +444,8 @@ class SalesPredict(object):
         for day, model, cnt in zip(cum_cnt['rent_day'], cum_cnt['res_model'], cum_cnt['res_rate']):
             res_rate_dict[day].update({model: cnt})
 
-        cum_util = res_util.groupby(by=['rent_day', 'res_model']).sum()['util_rate']
+        cum_util = res_util.groupby(by=['rent_day', 'res_model']).sum()['util']
         cum_util = cum_util.reset_index(level=(0, 1))
-        cum_util = cum_util.rename(columns={'util_rate': 'util'})
 
         cum_util = self._add_capacity(df=cum_util)
         cum_util['util_rate'] = cum_util['util'] / cum_util['capa']
@@ -558,7 +507,7 @@ class SalesPredict(object):
 
             res_util.extend(np.array([
                 date_range, [res_day] * date_len, util, [discount] * date_len, [model] * date_len]).T)
-        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util_rate', 'discount', 'res_model'])
+        res_util_df = pd.DataFrame(res_util, columns=['rent_day', 'res_day', 'util', 'discount', 'res_model'])
 
         return res_util_df
 

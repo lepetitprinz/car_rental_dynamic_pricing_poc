@@ -11,14 +11,14 @@ import pandas as pd
 
 class DiscRecommend(object):
 
-    def __init__(self, res_status_ud_day: str, apply_day: str, model_detail: str,
+    def __init__(self, res_status_ud_day: str, apply_day: str, type_apply: str,
                  disc_confirm_last_week: str):
         self.utility = Utility
         # Initial data
+        self.type_apply = type_apply    # model / car
+        self.apply_day = apply_day      # Applying day of recommend discounts
         self.res_update_day = res_status_ud_day
-        self.apply_day = apply_day
         self.disc_confirm_last_week = disc_confirm_last_week
-        self.type_apply = model_detail
         self.capa_re: dict = dict()
         self.season: pd.DataFrame = pd.DataFrame()
         self.dmd_pred: pd.DataFrame = pd.DataFrame()
@@ -29,39 +29,38 @@ class DiscRecommend(object):
 
         # Car types
         self.model_nm_map: dict = self.utility.MODEL_NAME_MAP
-        self.model_nm_map_rev: dict = self.utility.MODEL_NAME_MAP_REV
         self.type_group: list = self.utility.TYPE_GROUP
         self.type_model: list = self.utility.TYPE_MODEL
-        self.type_apply: dict = {'model': self.type_group, 'car': self.type_model}
+        self.applied_list: dict = {'model': self.type_group, 'car': self.type_model}
 
         # dataset on prediction day
-        self.res_pred: dict = dict()       # key: av / k3 / vl / su
-        self.res_cnt_re: dict = dict()    # key: av / k3 / vl / su
-        self.res_util_re: dict = dict()   # key: av / k3 / vl / su
+        self.res_pred: dict = dict()
+        self.res_cnt_re: dict = dict()
+        self.res_util_re: dict = dict()
         self.disc_confirm: dict = {}
 
         # Recommendation Input
-        self.rec_input: dict = dict()
         self.exp_dmd_change: float = 0.
 
     def rec(self, pred_days: list, type_apply: str):
         self._set_necessary_data(type_apply=type_apply)
-        self.disc_confirm = self._get_disc_confirm_last_week()
+        self.disc_confirm = self._load_disc_confirm_last_week()
 
         summary = defaultdict(list)
         for pred_day in pred_days:
+            print(f"pred_day: {pred_day}")
             # Load dataset
             self._load_data(pred_day=pred_day)
 
             # Preprocessing
-            self._drop_column()                 # Drop columns
-            self._rename_column()               # Rename columns
+            self._drop_column()     # Drop columns
+            self._rename_column()   # Rename columns
             rec_input = self._merge_hx_curr_df()    # Set recommendation input
             rec_input = self._add_feature(input_dict=rec_input, pred_day=pred_day)
-            rec_input = self._fill_na(input_dict=rec_input)    # Forward fill
-            self._set_exp_dmd_change(pred_day=pred_day)    #
-            rec_input = self._filter_date(input_dict=rec_input)
-            rec_input = self._scale_data(input_dict=rec_input)
+            rec_input = self._fill_na(input_dict=rec_input)         # Fill NA (Forward fill)
+            self._set_exp_dmd_change(pred_day=pred_day)             # Set Expected demand change
+            rec_input = self._filter_date(input_dict=rec_input)     # Filter dates(on applied periods)
+            # rec_input = self._scale_data(input_dict=rec_input)    # Convert float to percentage
 
             # Recommendation
             output = self._rec_disc(input_dict=rec_input)
@@ -76,7 +75,7 @@ class DiscRecommend(object):
             output_renamed = self._rename_col_kor(output=output_rearranged)
 
             # Save result on each day
-            self._save_result(output=output_renamed, pred_day=pred_day)
+            # self._save_result(output=output_renamed, pred_day=pred_day)
             # Get recommendation data of latest day
             fst_rec_data = self._get_fst_rec_data(output=output_renamed, pred_day=pred_day)
 
@@ -87,15 +86,19 @@ class DiscRecommend(object):
         summary_df = self._filter_arrange_summary(summary=summary)
 
         # Save summary results
-        self._save_summary_result(summary=summary_df)
+        # self._save_summary_result(summary=summary_df)
         print("Recommendation Process is finished")
 
-    def _get_disc_confirm_last_week(self):
+    def _load_disc_confirm_last_week(self):
         # Initial capacity of each model
         load_path = os.path.join('..', 'input', 'disc_confirm')
         disc_comfirm = pd.read_csv(os.path.join(load_path, ''.join(['disc_confirm_', self.disc_confirm_last_week,
                                                 '.csv'])), delimiter='\t', dtype={'date': str, 'disc': int})
+
+        # Change data type (string -> datetime)
         disc_comfirm['date'] = pd.to_datetime(disc_comfirm['date'], format='%Y%m%d')
+
+        # Make model/date/discount mapping dictionary
         disc_comfirm_dict = defaultdict(dict)
         for model, date, disc in zip(disc_comfirm['model'], disc_comfirm['date'], disc_comfirm['disc']):
             disc_comfirm_dict[self.model_nm_map[model]].update({date: disc})
@@ -104,50 +107,29 @@ class DiscRecommend(object):
 
     def _set_necessary_data(self, type_apply: str):
         # Capacity history of each car model
-        capa_re = self.utility.get_capacity(time='re', type_apply=type_apply)
-        capa_re_unavail = self.utility.get_capacity(time='re', type_apply=type_apply, unavail=True)
+        capa_re = self.utility.load_capacity(time='re', type_apply=type_apply)
+        # Load unavailable capacity of car models
+        capa_re_unavail = self.utility.load_capacity(time='re', type_apply=type_apply, unavail=True)
         capa_re_unavail = capa_re_unavail.rename(columns={'capa': 'unavail'})
-        capa_re = self._conv_mon_to_day(df=capa_re, end_day='28')
-        capa_re = self._apply_unavail_capa(capa=capa_re, capa_unavail=capa_re_unavail)
-
-        self.capa_re = {(date, model): capa for date, model, capa in zip(capa_re['date'],
-                                                                         capa_re['model'],
-                                                                         capa_re['capa'])}
+        # Convert monthly capacity to daily
+        capa_re = self.utility.conv_mon_to_day(df=capa_re)
+        # Subtract unavailable capacity
+        capa_re = self.utility.apply_unavail_capa(capacity=capa_re, capa_unavail=capa_re_unavail)
+        # Mapping dictionary: (Data, Model) -> capacity
+        self.capa_re = self.utility.make_capa_map(df=capa_re)
 
         # Seasonality
-        season_hx = self.utility.get_season(time='hx')
-        season_re = self.utility.get_season(time='re')
+        season_hx = self.utility.load_season(time='hx')
+        season_re = self.utility.load_season(time='re')
         self.season = pd.concat([season_hx, season_re])
 
         # Demand change prediction of jeju visitors
         load_path = os.path.join('..', 'result', 'data', 'model_1')
         self.dmd_pred = pd.read_csv(os.path.join(load_path, 'dmd_pred_2012_2102.csv'))
 
-    @staticmethod
-    def _conv_mon_to_day(df: pd.DataFrame, end_day: str):
-        months = np.sort(df['date'].unique())
-        days = pd.date_range(start=months[0] + '01', end=months[-1] + end_day)
-        model_unique = df[['model', 'capa']].drop_duplicates()
-
-        df_days = pd.DataFrame()
-        for model, capa in zip(model_unique['model'], model_unique['capa']):
-            temp = pd.DataFrame({'date': days, 'model': model, 'capa': capa})
-            df_days = pd.concat([df_days, temp], axis=0)
-
-        return df_days
-
-    @staticmethod
-    def _apply_unavail_capa(capa: pd.DataFrame, capa_unavail: pd.DataFrame):
-        capa_unavail['date'] = pd.to_datetime(capa_unavail['date'], format='%Y%m%d')
-        capa_new = pd.merge(capa, capa_unavail, how='left', on=['date', 'model'], left_index=True, right_index=False)
-        capa_new = capa_new.fillna(0)
-        capa_new['capa'] = capa_new['capa'] - capa_new['unavail']
-
-        return capa_new
-
     def _load_data(self, pred_day: str):
         load_path = os.path.join('..', 'result', 'data', 'prediction', self.apply_day)
-        detail_type = self.type_apply[self.type_apply]
+        detail_type = self.applied_list[self.type_apply]
         res_exp = {}
         for model in detail_type:
             res_exp[model] = pd.read_csv(os.path.join(load_path, model, 'res_pred(' + pred_day + ').csv'))
@@ -178,12 +160,10 @@ class DiscRecommend(object):
 
     def _rename_column(self):
         for df in self.res_cnt_re.values():
-            df.rename(columns={'cnt_cum': 'curr_cnt',
-                               'disc_mean': 'curr_disc_apply'}, inplace=True)
+            df.rename(columns={'cnt_cum': 'curr_cnt', 'disc_mean': 'curr_disc_apply'}, inplace=True)
 
         for df in self.res_util_re.values():
-            df.rename(columns={'util_cum': 'curr_util_time',
-                               'util_rate_cum': 'curr_util_rate'}, inplace=True)
+            df.rename(columns={'util_cum': 'curr_util_time', 'util_rate_cum': 'curr_util_rate'}, inplace=True)
 
         for df in self.res_pred.values():
             df.rename(columns={'exp_util': 'exp_util_rate'}, inplace=True)
@@ -205,7 +185,7 @@ class DiscRecommend(object):
     def _add_feature(self, input_dict: dict, pred_day: str):
         pred_datetime = dt.datetime(*list(map(int, pred_day.split('-'))))
         for model, df in input_dict.items():
-            df['avail_capa'] = self.capa_re[(pred_datetime, self.model_nm_map_rev[model])] - df['curr_util_time']
+            df['avail_capa'] = self.capa_re[(pred_datetime, model)] - df['curr_util_time']
             df['applied_disc'] = self.disc_confirm[model][pred_datetime]
 
         return input_dict
@@ -251,7 +231,10 @@ class DiscRecommend(object):
         for model, df in input_dict.items():
             # util_rate: float (0.xx)
             df['rec_disc_chg_rate'] = df[['curr_util_rate', 'exp_util_rate']].apply(self._get_rec, axis=1)
-            df['rec_disc'] = df['applied_disc'] * (1 + df['rec_disc_chg_rate'] / 100)
+            rate = df.iloc[0, :]['rec_disc_chg_rate']
+            print(f"Model: {model}, rate: {np.round(rate, 3)}")
+            # df['rec_disc'] = df['applied_disc'] * (1 + df['rec_disc_chg_rate'] / 100)
+            df['rec_disc'] = df['applied_disc'] * df['rec_disc_chg_rate']
             df = df.drop(columns=['rec_disc_chg_rate'], errors='ignore')
             rec_output[model] = df
 
@@ -333,8 +316,8 @@ class DiscRecommend(object):
     def _chg_data_scale(output: dict):
         for model, df in output.items():
             df['curr_util_time'] = np.round(df['curr_util_time'].to_numpy(), 1)
-            df['curr_util_rate'] = np.round(df['curr_util_rate'].to_numpy(), 1)
-            df['curr_disc_apply'] = np.round(df['curr_disc_apply'].to_numpy(), 1)
+            df['curr_util_rate'] = np.round(df['curr_util_rate'].to_numpy(), 3)
+            df['curr_disc_apply'] = np.round(df['curr_disc_apply'].to_numpy(), 2)
             df['avail_capa'] = np.round(df['avail_capa'].to_numpy(), 1)
 
         return output

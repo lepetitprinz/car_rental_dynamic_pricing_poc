@@ -75,7 +75,7 @@ def disc_recommend(start_date: str, end_date: str, apply_day: str, res_update_da
     pred_days = pd.date_range(start=start_date, end=end_date, freq='D')
     pred_days = pd.Series(pred_days).dt.strftime('%Y-%m-%d')
 
-    model = DiscRecommend(res_status_ud_day=res_update_day, apply_day=apply_day, model_detail=type_apply,
+    model = DiscRecommend(res_status_ud_day=res_update_day, apply_day=apply_day, type_apply=type_apply,
                           disc_confirm_last_week=disc_confirm_last_week)
     model.rec(pred_days=pred_days, type_apply=type_apply)
 
@@ -90,7 +90,7 @@ def sales_predict(start_date: str, end_date: str, apply_day: str,
                               apply_day=apply_day,
                               disc_confirm_last_week=disc_confirm_last_week,
                               end_date=end_date)
-    pred_sales.data_preprocessing()
+    pred_sales.data_preprocessing(type_apply='car')
     # pred_sales.train()
     pred_sales.predict(pred_days=pred_days)
 
@@ -99,18 +99,25 @@ def weekly_report(start_date_weekly: str, end_date_weekly: str,
                   apply_last_week: str, apply_this_week: str,
                   res_status_last_week: str, res_status_this_week: str, res_status_cancel_this_week: str,
                   res_confirm_last_week: str, disc_confirm_last_week: str, disc_rec_last_week: str,
-                  res_confirm_day_from: str, res_confirm_day_to: str):
+                  disc_rec_2w_ago: str, disc_rec_3w_ago: str, res_confirm_day_from: str, res_confirm_day_to: str,
+                  res_confirm_bf: str):
     post_proc = WeeklyReport(res_status_last_week=res_status_last_week,
                              res_status_this_week=res_status_this_week,
                              res_status_cancel_this_week=res_status_cancel_this_week,
                              res_confirm_last_week=res_confirm_last_week,
                              disc_confirm_last_week=disc_confirm_last_week,
                              disc_rec_last_week=disc_rec_last_week,
+                             disc_rec_2w_ago = disc_rec_2w_ago,
+                             disc_rec_3w_ago=disc_rec_3w_ago,
                              start_day=start_date_weekly, end_day=end_date_weekly,
                              apply_last_week=apply_last_week,
-                             apply_this_week=apply_this_week)
-
-    # post_proc.post_process(type_apply='car')
+                             apply_this_week=apply_this_week,
+                             res_confirm_day_from=res_confirm_day_from,
+                             res_confirm_day_to=res_confirm_day_to,
+                             res_confirm_bf=res_confirm_bf)
+    # Post process
+    # post_proc.post_process(type_apply='car', time='re')
+    # Calculate sales
     post_proc.calc_sales(res_confirm_day_from=res_confirm_day_from,
                          res_confirm_day_to=res_confirm_day_to,
                          apply_last_week=apply_last_week,
@@ -126,26 +133,31 @@ def main():
     n_test = 84  # 12 weeks
 
     # Recent reservation status (최신 예약현황)
-    res_status_ud_day = '201210'        # 최신 예약건수 업데이트 날짜
+    res_status_ud_day = '201216'        # 최신 예약건수 업데이트 날짜
 
     # Recommend hyper-parameter
-    start_date = '20201214'     # 할인율 산출 기간: 시작
-    end_date = '20210228'       # 할인율 산출 기간: 끝
-    apply_day = '20201214'      # Recommend discount apply day (할인율 산출 및 적용일)
+    # start_date = '20201218'     # 할인율 산출 기간: 시작
+    # end_date = '20210228'       # 할인율 산출 기간: 끝
+    start_date = '20201223'     # 할인율 산출 기간: 시작
+    end_date = '20210103'       # 할인율 산출 기간: 끝
+    apply_day = '20201218'      # Recommend discount apply day (할인율 산출 및 적용일)
     disc_confirm_last_week = '201204'   # Discount dataset on previous week (이전 확정 할인율)
 
     # Weekly Report hyper-paramter
-    start_date_weekly = '20201201'      # 보고서 산출 기간: 시작
+    start_date_weekly = '20201205'      # 보고서 산출 기간: 시작
     end_date_weekly = '20210228'        # 보고서 산출 기간: 끝
-    apply_last_week = '201127'          # 지난주 할인율 산출 및 적용일
-    apply_this_week = '201204'          # 이번주 할인율 산출 및 적용일
-    res_status_last_week = '201126'     # 지난주 예약현황 업데이트 날짜
-    res_status_this_week = '201204'     # 이번주 예약현황 업데이트 날짜
-    res_status_cancel_this_week = '201203'  # 취소 데이터 업데이트 날짜
-    res_confirm_last_week = '201204'        # 지난주 예약실적 업데이트 날짜
-    disc_rec_last_week = '20201201'         # 지난주 할인율 추천 날짜
-    res_confirm_day_from = '201201'
-    res_confirm_day_to = '201204'
+    apply_last_week = '201211'          # 지난주 할인율 산출 및 적용일
+    apply_this_week = '201218'          # 이번주 할인율 산출 및 적용일
+    res_status_last_week = '201210'     # 지난주 예약현황 업데이트 날짜
+    res_status_this_week = '201216'     # 이번주 예약현황 업데이트 날짜
+    res_status_cancel_this_week = '201216'  # 취소 데이터 업데이트 날짜
+    res_confirm_last_week = '201211'        # 지난주 예약실적 업데이트 날짜
+    disc_rec_last_week = '20201214'         # 지난주 할인율 추천 날짜 (recommend/summary/yyyymmdd)
+    disc_rec_2w_ago = '20201207'
+    disc_rec_3w_ago = '20201201'
+    res_confirm_day_from = '201205'         # 예약실적 확정일: 시작
+    res_confirm_day_to = '201211'           # 예약실적 확정일: 끝
+    res_confirm_bf = '201126'
 
     # 1.Demand Prediction
     # dmd_predict(start_date=time_series_start_date,
@@ -154,8 +166,7 @@ def main():
     #             pred_step=31 + 28 + 31)
 
     # 2.Data Preprocessing
-    # data_preprocessing(res_status_ud_day=res_status_ud_day, end_date=end_date,
-    #                    type_apply='car')
+    # data_preprocessing(res_status_ud_day=res_status_ud_day, end_date=end_date, type_apply='car')
 
     # 3.Reservation Prediction
     # res_predict(start_date=start_date,
@@ -187,9 +198,12 @@ def main():
     #               res_status_cancel_this_week=res_status_cancel_this_week,
     #               res_confirm_last_week=res_confirm_last_week,
     #               disc_confirm_last_week=disc_confirm_last_week,
+    #               disc_rec_2w_ago=disc_rec_2w_ago,
+    #               disc_rec_3w_ago=disc_rec_3w_ago,
     #               disc_rec_last_week=disc_rec_last_week,
     #               res_confirm_day_from=res_confirm_day_from,
-    #               res_confirm_day_to=res_confirm_day_to)
+    #               res_confirm_day_to=res_confirm_day_to,
+    #               res_confirm_bf=res_confirm_bf)
 
 # Run main function
 main()
