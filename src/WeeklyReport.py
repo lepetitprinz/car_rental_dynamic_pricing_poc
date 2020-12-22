@@ -17,8 +17,8 @@ class WeeklyReport(object):
                   "extr": ExtraTreesRegressor}
 
     def __init__(self, res_status_last_week: str, res_status_this_week: str, res_status_cancel_this_week: str,
-                 res_confirm_last_week: str, disc_confirm_last_week: str, disc_rec_last_week: str,
-                 disc_rec_2w_ago: str, disc_rec_3w_ago: str, start_day: str, end_day: str, apply_last_week: str,
+                 res_confirm_last_week: str, disc_confirm_last_week: str, disc_rec_days: list,
+                 start_day: str, end_day: str, apply_last_week: str,
                  apply_this_week: str, res_confirm_day_from: str, res_confirm_day_to: str, res_confirm_bf: str):
         self.utility = Utility
         # Path
@@ -31,9 +31,7 @@ class WeeklyReport(object):
         self.res_status_cancel_this_week = res_status_cancel_this_week
         self.res_confirm_last_week = res_confirm_last_week
         self.disc_confirm_last_week = disc_confirm_last_week
-        self.disc_rec_last_week = disc_rec_last_week
-        self.disc_rec_2w_ago = disc_rec_2w_ago
-        self.disc_rec_3w_ago = disc_rec_3w_ago
+        self.disc_rec_days: list = disc_rec_days
         self.apply_this_week = apply_this_week
         self.apply_last_week = apply_last_week
         self.start_day = start_day
@@ -538,47 +536,33 @@ class WeeklyReport(object):
         return disc_comfirm_dict
 
     def _get_disc_rec(self):
-        load_path_last_week = os.path.join('..', 'result', 'data', 'recommend', 'summary',
-                                           self.disc_rec_last_week, 'original')
-        load_path_2w_ago = os.path.join('..', 'result', 'data', 'recommend', 'summary',
-                                        self.disc_rec_2w_ago, 'original')
-        load_path_3w_ago = os.path.join('..', 'result', 'data', 'recommend', 'summary',
-                                        self.disc_rec_3w_ago, 'original')
-
         filter_cols = ['대여일', '기대 예약건수', '기대 가동대수(시간)', '기대가동률', '추천 할인율']
         rename_cols = {'대여일': 'rent_day', '기대 예약건수': 'exp_cnt', '기대 가동대수(시간)': 'exp_util',
                        '기대가동률': 'exp_util_rate', '추천 할인율': 'disc_rec'}
-        rec_last_week = {}
+        disc_rec_days_dt = pd.to_datetime(self.disc_rec_days, format='%Y%m%d')
+        days_len = len(self.disc_rec_days)
+
+        disc_rec = {}
         for model_grp in self.type_model:
-            disc_rec_last_week = dt.datetime.strptime(self.disc_rec_last_week, '%Y%m%d')
-            disc_rec_2w_ago = dt.datetime.strptime(self.disc_rec_2w_ago, '%Y%m%d')
+            disc_list = []
+            for i, day in enumerate(self.disc_rec_days):
+                disc = pd.read_csv('..', 'result', 'data', 'recommend', 'summary', day, 'original',
+                                   ''.join(['rec_summary_', model_grp, '.csv']), encoding='euc-kr')
 
-            lt_week = pd.read_csv(os.path.join(load_path_last_week, 'rec_summary_' + model_grp + '.csv'),
-                                  encoding='euc-kr')
-            lt_week = lt_week[filter_cols]
-            lt_week = lt_week.rename(columns=rename_cols)
-            lt_week['rent_day'] = pd.to_datetime(lt_week['rent_day'], format='%Y-%m-%d')
+                disc = disc[filter_cols]
+                disc = disc.rename(columns=rename_cols)
+                disc['rent_day'] = pd.to_datetime(disc['rent_day'], format='%Y-%m-%d')
+                if i != days_len - 1:
+                    disc = disc[disc['rent_day'] < disc_rec_days_dt[i+1]]
 
-            week_2_ago = pd.read_csv(os.path.join(load_path_2w_ago, 'rec_summary_' + model_grp + '.csv'),
-                                       encoding='euc-kr')
-            week_2_ago = week_2_ago[filter_cols]
-            week_2_ago = week_2_ago.rename(columns=rename_cols)
-            week_2_ago['rent_day'] = pd.to_datetime(week_2_ago['rent_day'], format='%Y-%m-%d')
-            week_2_ago = week_2_ago[week_2_ago['rent_day'] < disc_rec_last_week]
+                disc_list.append(disc)
 
-            week_3_ago = pd.read_csv(os.path.join(load_path_3w_ago, 'rec_summary_' + model_grp + '.csv'),
-                                       encoding='euc-kr')
-            week_3_ago = week_3_ago[filter_cols]
-            week_3_ago = week_3_ago.rename(columns=rename_cols)
-            week_3_ago['rent_day'] = pd.to_datetime(week_3_ago['rent_day'], format='%Y-%m-%d')
-            week_3_ago = week_3_ago[week_3_ago['rent_day'] < disc_rec_2w_ago]
+            disc_tot = pd.concat(disc_list, axis=0)
+            disc_rec[model_grp] = {date: [cnt, util, util_rate, disc] for date, cnt, util, util_rate,
+                                   disc in zip(disc_tot['rent_day'], disc_tot['exp_cnt'], disc_tot['exp_util'],
+                                               disc_tot['exp_util_rate'], disc_tot['disc_rec'])}
 
-            lt_week = pd.concat([week_3_ago, week_2_ago, lt_week], axis=0)
-
-            rec_last_week[model_grp] = {date: [cnt, util, util_rate, disc] for date, cnt,
-                                                                               util, util_rate, disc in zip(lt_week['rent_day'], lt_week['exp_cnt'],
-                                                                                                            lt_week['exp_util'], lt_week['exp_util_rate'], lt_week['disc_rec'])}
-        return rec_last_week
+        return disc_rec
 
     def _get_season(self, time: str):
         # Load recent seasonality dataset

@@ -124,7 +124,7 @@ class DiscRecommend(object):
         self.season = pd.concat([season_hx, season_re])
 
         # Demand change prediction of jeju visitors
-        load_path = os.path.join('..', 'result', 'data', 'model_1')
+        load_path = os.path.join('..', 'result', 'data', 'time_series')
         self.dmd_pred = pd.read_csv(os.path.join(load_path, 'dmd_pred_2012_2102.csv'))
 
     def _load_data(self, pred_day: str):

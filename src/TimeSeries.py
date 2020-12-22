@@ -22,20 +22,28 @@ class TimeSeries(object):
     def __init__(self, start_date: str, end_date: str):
         self.load_path = os.path.join('..', 'input', 'demand')
         self.save_path = os.path.join('..', 'result', 'model', 'time_series')
-        self.visitor: pd.DataFrame = pd.DataFrame()
         self.start_date = start_date
         self.end_date = end_date
         self.model: dict = {'ar': self.model_ar,
                             'arima': self.model_arima,
                             'hw': self.model_hw}
 
-    def train(self, n_test: int, test_models: list, param_grids: dict):
-        self.visitor = pd.read_csv(os.path.join(self.load_path, 'jeju_visit_daily.csv'), delimiter='\t')
+    def _filter_period(self, df: pd.DataFrame):
+        df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
+        start_date = dt.datetime.strptime(self.start_date, '%Y%m%d')
+        end_date = dt.datetime.strptime(self.end_date, '%Y%m%d')
+        df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
 
-        data = self._filter_periods()
+        return df
+
+    def train(self, n_test: int, test_models: list, param_grids: dict):
+        visitor = pd.read_csv(os.path.join(self.load_path, 'jeju_visit_daily.csv'), delimiter='\t')
+        visitor = visitor.rename(columns={'yyyymmdd': 'date'})
+
+        # Filter date
+        data = self._filter_period(df=visitor)
 
         # String date convert to datetime
-        data['date'] = pd.to_datetime(data['date'], format='%Y%m%d')
         data = data.set_index('date')
 
         # Split dataset to domestic and foreign
@@ -65,6 +73,8 @@ class TimeSeries(object):
             pickle.dump(best_model_params, f)
             f.close()
 
+        print("Training of demand prediction model is finished")
+
     def predict(self, pred_step: int):
         # Load best parameters for model
         best_params = {}
@@ -73,7 +83,10 @@ class TimeSeries(object):
             best_params[visit] = pickle.load(f)
             f.close()
 
-        data = self._filter_periods()
+        # Load jeju visitor dataset
+        visitor = pd.read_csv(os.path.join(self.load_path, 'jeju_visit_daily.csv'), delimiter='\t')
+        visitor = visitor.rename(columns={'yyyymmdd': 'date'})
+        data = self._filter_period(df=visitor)
 
         # String date convert to datetime
         data['date'] = pd.to_datetime(data['date'], format='%Y%m%d')
@@ -108,8 +121,7 @@ class TimeSeries(object):
                                  'dmd_chg': [chg_rate_20_12, chg_rate_21_01, chg_rate_21_02]})
         dmd_pred.to_csv(os.path.join(self.save_path, 'dmd_pred_2012_2102.csv'), index=False)
 
-    def _filter_periods(self):
-        return self.visitor[(self.visitor['date'] >= self.start_date) & (self.visitor['date'] <= self.end_date)]
+        print("Model prediction is finished")
 
     # Time series model
     @staticmethod
@@ -181,10 +193,12 @@ class TimeSeries(object):
         train, test = data[:-n_test], data[-n_test:]
 
         # Validation
+        print(f'Model: {model}, Configuration: {config}')
         prediction = self.model[model](data=train, config=config, pred_step=n_test)
 
         # Add actual observation to history for the next loop
         error = math.sqrt(mean_squared_error(test.values, prediction))
+        print(f'Error: {error}')
 
         return error
 

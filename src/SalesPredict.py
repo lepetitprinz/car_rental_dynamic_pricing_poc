@@ -182,7 +182,8 @@ class SalesPredict(object):
 
         # Caculate rent periods
         df['rent_period'] = df['return_datetime'] - df['rent_datetime']
-        df['rent_period_hours'] = df['rent_period'].to_numpy().astype('timedelta64[h]') / np.timedelta64(1, 'h')
+        df['rent_period_hours'] = df['rent_period'].apply(lambda x: x.hours)
+        # df['rent_period_hours'] = df['rent_period'].to_numpy().astype('timedelta64[h]') / np.timedelta64(1, 'h')
 
         return df
 

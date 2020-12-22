@@ -26,7 +26,7 @@ class DataPrep(object):
 
     def prep_res_history(self, type_apply: str):
         # Make reservation history dataset
-        # self._make_res_hx()
+        self._make_res_hx()
 
         # Load and set data
         res_hx = self.utility.load_res(time='hx')
@@ -46,6 +46,8 @@ class DataPrep(object):
         # Data preprocessing
         self._prep_by_group(df=res_hx, type_apply=type_apply, time='hx')
 
+        print("Data preprocessing for history data is finished")
+
     def prep_res_recent(self, res_status_ud_day: str, type_apply: str, time: str):
         # Load reservation status dataset
         res_re = self.utility.load_res(time=time, status_update_day=res_status_ud_day)
@@ -54,7 +56,7 @@ class DataPrep(object):
         self.capacity['re'] = self._load_capacity(time=time, type_apply=type_apply)
 
         # Rename columns
-        res_re = res_re.rename(columns=self.utility.RENAME_COL_RES, errors='ignore')
+        res_re = res_re.rename(columns=self.utility.RENAME_COL_RES)
         # Filter grade of car models
         res_re = self.utility.filter_model_grade(df=res_re)
 
@@ -71,6 +73,7 @@ class DataPrep(object):
 
         # Data preprocessing
         self._prep_by_group(df=res_re, type_apply=type_apply, time=time)
+        print("Data preprocessing for recent data is finished")
 
         print('')
         print("Data preprocessing is finished.")

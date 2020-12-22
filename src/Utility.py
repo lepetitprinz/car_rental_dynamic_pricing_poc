@@ -187,7 +187,8 @@ class Utility(object):
     @staticmethod
     def add_col_lead_time(df: pd.DataFrame):
         df['lead_time'] = df['rent_day'] - df['res_day']
-        df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
+        # df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
+        df['lead_time'] = df['lead_time'].apply(lambda x: x.days)
         df['lead_time'] = df['lead_time'] * -1
 
         return df
@@ -196,7 +197,8 @@ class Utility(object):
     def add_col_lead_time_vec(df: pd.DataFrame):
         # Add lead time
         df['lead_time'] = df['rent_day'] - df['res_day']
-        df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
+        # df['lead_time'] = df['lead_time'].to_numpy().astype('timedelta64[D]') / np.timedelta64(1, 'D')
+        df['lead_time'] = df['lead_time'].apply(lambda x: x.days)
 
         # Add lead time vector
         df['lead_time_vec'] = (df['lead_time'] // 7) + 24       # Lead time > 28 : 1 week
